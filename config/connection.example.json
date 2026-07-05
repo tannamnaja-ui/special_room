@@ -1,0 +1,8 @@
+{
+  "db_type": "postgresql",
+  "host": "YOUR_DB_HOST",
+  "port": "5432",
+  "database": "YOUR_DB_NAME",
+  "username": "YOUR_DB_USER",
+  "password": "YOUR_DB_PASSWORD"
+}

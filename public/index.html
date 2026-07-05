@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบจองห้องพิเศษ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div style="text-align:center">
+    <div class="spinner"></div>
+    <p style="margin-top:12px;color:#546E7A;font-size:14px">กำลังโหลด...</p>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- App Layout -->
+<div class="app-layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div style="font-size:24px;margin-bottom:6px">🏥</div>
+      <div class="hospital-name">ระบบบริหารจัดการ</div>
+      <div class="system-name">ห้องพิเศษ</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-section-label">เมนูหลัก</div>
+      <a class="nav-item active" id="nav-dashboard" onclick="switchTab('dashboard')">
+        <span class="nav-icon">📊</span>
+        <span>แดชบอร์ด</span>
+      </a>
+      <a class="nav-item" id="nav-booking" onclick="switchTab('booking')">
+        <span class="nav-icon">📝</span>
+        <span>ฟอร์มจองห้องพิเศษ</span>
+      </a>
+      <a class="nav-item" id="nav-reservations" onclick="switchTab('reservations')">
+        <span class="nav-icon">📋</span>
+        <span>รายชื่อผู้จองห้องพิเศษ<br>(ได้ห้องแล้ว รอเข้าพัก)</span>
+        <span class="nav-badge" id="reservationsBadge" style="display:none">0</span>
+      </a>
+      <a class="nav-item" id="nav-waitlist" onclick="switchTab('waitlist')">
+        <span class="nav-icon">⏳</span>
+        <span>คิวรอห้องพัก<br>(ยังไม่ได้ห้อง)</span>
+        <span class="nav-badge" id="waitBadge" style="display:none">0</span>
+      </a>
+      <a class="nav-item" id="nav-current" onclick="switchTab('current')">
+        <span class="nav-icon">🛏️</span>
+        <span>ผู้พักปัจจุบัน</span>
+      </a>
+      <a class="nav-item" id="nav-allrooms" onclick="switchTab('allrooms')">
+        <span class="nav-icon">🏨</span>
+        <span>ชื่อผู้จองและรอคิวทั้งหมด<br><span style="font-size:11px;opacity:0.8">(รอจัดการ)</span></span>
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <a class="nav-item" id="nav-settings" onclick="switchTab('settings')" style="margin-bottom:4px">
+        <span class="nav-icon">⚙️</span>
+        <span>ตั้งค่าระบบ</span>
+      </a>
+      <div class="user-info">
+        <div class="user-avatar">👤</div>
+        <div>
+          <div class="user-name" id="sidebarUserName">-</div>
+          <div class="user-role">เจ้าหน้าที่</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="logout()">
+        <span>🚪</span>
+        <span>ออกจากระบบ</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-title" id="topbarTitle">📊 แดชบอร์ดสถานะห้องพัก</div>
+      <div class="topbar-right">
+        <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:#546E7A">
+          <span class="realtime-dot"></span>
+          <span>Real-time</span>
+        </div>
+        <div class="datetime-display" id="clockDisplay"></div>
+      </div>
+    </header>
+
+    <!-- Page Content -->
+    <div class="page-content">
+
+      <!-- ===== TAB: DASHBOARD ===== -->
+      <div class="tab-panel active" id="panel-dashboard">
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-card" style="border-left-color:#1565C0">
+            <div class="stat-icon">🛏️</div>
+            <div>
+              <div class="stat-number" id="countTotal" style="color:#1565C0">0</div>
+              <div class="stat-label">เตียงทั้งหมด</div>
+            </div>
+          </div>
+          <div class="stat-card available">
+            <div class="stat-icon">🟢</div>
+            <div>
+              <div class="stat-number" id="countAvailable">0</div>
+              <div class="stat-label">ว่าง</div>
+            </div>
+          </div>
+          <div class="stat-card occupied">
+            <div class="stat-icon">🔴</div>
+            <div>
+              <div class="stat-number" id="countOccupied">0</div>
+              <div class="stat-label">มีผู้พัก</div>
+            </div>
+          </div>
+          <div class="stat-card reserved">
+            <div class="stat-icon">🟡</div>
+            <div>
+              <div class="stat-number" id="countReserved">0</div>
+              <div class="stat-label">จองแล้ว</div>
+            </div>
+          </div>
+          <div class="stat-card" style="border-left-color:#FB8C00">
+            <div class="stat-icon">⏳</div>
+            <div>
+              <div class="stat-number" id="countWaiting" style="color:#FB8C00">0</div>
+              <div class="stat-label">คิวรอ</div>
+            </div>
+          </div>
+          <div class="stat-card occupancy">
+            <div class="stat-icon">📊</div>
+            <div>
+              <div class="stat-number" id="countOccupancyRate">0%</div>
+              <div class="stat-label">Occupancy Rate</div>
+              <div class="stat-desc">อัตราการครองเตียงพิเศษ<br>จำนวนเตียงที่มีผู้ป่วยอยู่ ÷ จำนวนเตียงทั้งหมด × 100</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ชื่อผู้จองและรอคิวทั้งหมด (Dashboard copy) -->
+        <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden;margin-top:4px">
+          <div class="section-header" style="flex-wrap:wrap;gap:10px">
+            <h3>🏨 ชื่อผู้จองและรอคิวทั้งหมด <span style="font-size:13px;font-weight:400;color:#90A4AE">(รอจัดการ)</span></h3>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select id="dashBedWardFilter" class="select-control"
+                style="width:220px;padding:6px 12px;font-size:13px"
+                onchange="filterDashHosBeds()">
+                <option value="">— ทุก Ward —</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="loadHosBeds()">🔄 รีเฟรช</button>
+            </div>
+          </div>
+          <div style="padding:10px 20px;border-bottom:1px solid #F0F4F8;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:#546E7A;margin-right:4px">กรองสถานะ:</span>
+            <button class="dash-bed-filter-btn active" data-status="" onclick="setDashBedStatusFilter('',this)">ทั้งหมด</button>
+            <button class="dash-bed-filter-btn" data-status="available" onclick="setDashBedStatusFilter('available',this)">🟢 ว่าง</button>
+            <button class="dash-bed-filter-btn" data-status="occupied" onclick="setDashBedStatusFilter('occupied',this)">🔴 มีผู้พัก</button>
+          </div>
+          <div id="dashAllRoomsContent" style="padding:20px">
+            <div class="empty-state"><div class="empty-icon">🏨</div><p>กำลังโหลดข้อมูล...</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: BOOKING FORM ===== -->
+      <div class="tab-panel" id="panel-booking">
+        <div class="booking-form-card">
+          <h2 class="section-title">📝 ฟอร์มจองห้องพิเศษ <span style="font-size:13px;font-weight:700;color:#E53935">ช่องที่มี * คือ ต้องมีข้อมูล</span></h2>
+
+          <!-- Section 1: Patient Info -->
+          <div class="section-title" style="font-size:14px;margin-top:0">👤 ข้อมูลผู้ป่วย</div>
+
+          <div class="form-row">
+            <div class="form-group" style="position:relative">
+              <label>AN (Admission Number)</label>
+              <div class="hn-search-group">
+                <input type="text" id="bnAn" class="form-control" placeholder="กรอก AN เพื่อค้นหา..."
+                  oninput="debounceAnInline()"
+                  onkeydown="if(event.key==='Escape'){hideAnDropdown()}else if(event.key==='Enter'){fillWardByAN(this.value.trim());hideAnDropdown()}"
+                  autocomplete="off">
+                <button class="btn btn-info" onclick="openAnSearch()">🔍</button>
+              </div>
+              <div id="bnAnDropdown" class="inline-search-dropdown" style="display:none"></div>
+            </div>
+            <div class="form-group">
+              <label>HN (Hospital Number) <span class="required-star">*</span></label>
+              <div class="hn-search-group">
+                <input type="text" id="bnHn" class="form-control" placeholder="กรอก HN แล้วกด Enter"
+                  onkeydown="if(event.key==='Enter')searchPatient()">
+                <button class="btn btn-info" onclick="openHnSearch()">🔍 ค้นหา</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="patient-info-box" id="patientInfoBox">
+            <div class="patient-info-grid">
+              <div class="info-row">
+                <span class="info-label">ชื่อ-สกุล:</span>
+                <span class="info-value" id="piName">-</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">HN:</span>
+                <span class="info-value" id="piHN">-</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">สิทธิการรักษา:</span>
+                <span class="info-value" id="piRights">-</span>
+              </div>
+            </div>
+          </div>
+
+          <input type="hidden" id="bnPatientName">
+          <input type="hidden" id="bnRightsType">
+
+          <div class="form-row" style="margin-top:12px">
+            <div class="form-group">
+              <label>หอผู้ป่วย (Ward) ต้นสังกัด <span class="required-star">*</span></label>
+              <input type="text" id="bnWard" class="form-control" placeholder="เช่น ศัลยกรรมชาย, อายุรกรรมหญิง">
+            </div>
+            <div class="form-group">
+              <label>แพทย์เจ้าของไข้</label>
+              <input type="text" id="bnDoctor" class="form-control" placeholder="ชื่อแพทย์">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>ชื่อผู้ติดต่อ <span class="required-star">*</span></label>
+              <input type="text" id="bnContactName" class="form-control" placeholder="ชื่อ-สกุล ผู้ติดต่อ">
+            </div>
+            <div class="form-group">
+              <label>เบอร์โทรผู้ติดต่อ <span class="required-star">*</span></label>
+              <input type="text" id="bnContactPhone" class="form-control" placeholder="เบอร์โทรศัพท์">
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- Section 2: Room Selection -->
+          <div class="section-title" style="font-size:14px">🛏️ เลือกห้องพัก</div>
+
+          <div class="form-row" style="margin-bottom:12px">
+            <div class="form-group">
+              <label>หอผู้ป่วย</label>
+              <select id="bnWardFilter" class="select-control" onchange="filterRoomsByWard()">
+                <option value="">— ทุกหอผู้ป่วย —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>ประเภทห้อง</label>
+              <select id="bnRoomType" class="select-control" onchange="filterRoomsByType()">
+                <option value="">-- เลือกประเภทห้อง --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>ห้องที่ต้องการ</label>
+              <select id="bnRoomId" class="select-control" onchange="showRoomPrice()">
+                <option value="">-- เลือกห้อง --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>ประเภทผู้จอง</label>
+              <select id="bnPriorityType" class="select-control">
+                <option value="">-- เลือกประเภทผู้จอง --</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- ราคาค่าห้อง + ค่าอาหาร -->
+          <div id="roomPriceBox" style="display:none;background:#F3E5F5;border-radius:10px;padding:12px 16px;margin-bottom:12px">
+            <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:14px">
+              <div class="info-row"><span class="info-label" style="min-width:90px">ค่าห้อง/วัน:</span><span class="info-value" id="priceRoom">-</span></div>
+              <div class="info-row"><span class="info-label" style="min-width:90px">ค่าอาหาร/วัน:</span><span class="info-value" id="priceFood">-</span></div>
+              <div class="info-row"><span class="info-label" style="min-width:90px">รวม/วัน:</span><span class="info-value" id="priceTotal" style="color:#C62828;font-size:15px">-</span></div>
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom:12px">
+            <div class="form-group">
+              <label>วันที่เข้าพัก (คาดการณ์) <span class="required-star">*</span></label>
+              <input type="datetime-local" id="bnCheckIn" class="form-control">
+            </div>
+            <div class="form-group">
+              <label>วันที่กำหนดออก</label>
+              <input type="date" id="bnCheckOut" class="form-control">
+            </div>
+          </div>
+
+          <div class="form-row" style="margin-bottom:12px">
+            <div class="form-group">
+              <label>เงินมัดจำ (บาท)</label>
+              <input type="number" id="bnDeposit" class="form-control" placeholder="0" min="0" step="100">
+            </div>
+            <div class="form-group">
+              <label>สิทธิการรักษา</label>
+              <input type="text" id="bnRightsDisplay" class="form-control" placeholder="ดึงอัตโนมัติจาก HN" readonly
+                style="background:#F5F7FA">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>หมายเหตุ / ความต้องการพิเศษ</label>
+            <textarea id="bnNotes" class="form-control" rows="2"
+              placeholder="เช่น แพ้อาหาร, ต้องการเตียงเสริมญาติ, คำสั่งแพทย์แยกห้อง"></textarea>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-top:12px">
+            <button class="btn btn-primary" style="flex:1" onclick="submitBooking()">✅ บันทึกการจอง (ได้ห้องแล้วรอเข้าพัก)</button>
+            <button class="btn btn-warning" onclick="addToWaitlist()">⏳ เพิ่มเข้าคิวรอห้องพัก (ยังไม่ได้ห้อง)</button>
+            <button class="btn btn-secondary" onclick="clearBookingForm()">🗑️ ล้างฟอร์ม</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: RESERVATIONS LIST ===== -->
+      <div class="tab-panel" id="panel-reservations">
+        <div class="waitlist-table-wrap">
+          <div class="section-header">
+            <h3>📋 รายชื่อผู้จองห้องพิเศษ (ได้ห้องแล้ว รอเข้าพัก)</h3>
+            <div style="display:flex;align-items:center;gap:14px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                <input type="radio" name="reservFilter" id="reservShowWaiting" value="reserved" onchange="loadReservations()" checked
+                  style="width:16px;height:16px;cursor:pointer;accent-color:var(--primary)">
+                แสดงเฉพาะที่กำลังรอเข้าห้องพัก
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                <input type="radio" name="reservFilter" id="reservShowOccupied" value="occupied" onchange="loadReservations()"
+                  style="width:16px;height:16px;cursor:pointer;accent-color:#43A047">
+                แสดงเฉพาะคนที่เข้าห้องพักแล้ว
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                <input type="radio" name="reservFilter" id="reservShowAll" value="all" onchange="loadReservations()"
+                  style="width:16px;height:16px;cursor:pointer;accent-color:#78909C">
+                แสดงทั้งหมด
+              </label>
+            </div>
+          </div>
+          <div style="padding:20px">
+            <div id="reservationsTableWrap">
+              <div style="text-align:center;color:#90A4AE;padding:40px 0;font-size:14px">กำลังโหลดข้อมูล...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: WAITLIST ===== -->
+      <div class="tab-panel" id="panel-waitlist">
+        <div class="waitlist-table-wrap">
+          <div class="section-header">
+            <h3>⏳ คิวรอห้องพัก (จองคิวไว้ ยังไม่ได้ห้อง)</h3>
+            <div style="display:flex;align-items:center;gap:14px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                <input type="radio" name="waitlistFilter" id="waitlistShowWaiting" value="waiting" onchange="loadWaitlist()" checked
+                  style="width:16px;height:16px;cursor:pointer;accent-color:var(--primary)">
+                แสดงเฉพาะที่กำลังรอคิว
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                <input type="radio" name="waitlistFilter" id="waitlistShowReserved" value="reserved" onchange="loadWaitlist()"
+                  style="width:16px;height:16px;cursor:pointer;accent-color:#43A047">
+                แสดงเฉพาะคนที่ได้ห้องแล้ว
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                <input type="radio" name="waitlistFilter" id="waitlistShowAll" value="all" onchange="loadWaitlist()"
+                  style="width:16px;height:16px;cursor:pointer;accent-color:#78909C">
+                แสดงทั้งหมด
+              </label>
+            </div>
+          </div>
+          <div id="waitlistContent">
+            <div class="empty-state">
+              <div class="empty-icon">📋</div>
+              <p>ไม่มีรายการในคิวรอ</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: CURRENT OCCUPANTS ===== -->
+      <div class="tab-panel" id="panel-current">
+        <!-- header bar -->
+        <div style="background:#fff;border-radius:12px;padding:14px 20px;margin-bottom:14px;
+                    display:flex;align-items:center;justify-content:space-between;
+                    box-shadow:0 2px 8px rgba(0,0,0,.06)">
+          <div style="font-size:17px;font-weight:700;color:var(--primary-dark)">🛏️ ผู้พักและการจองปัจจุบัน</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="occupantWardFilter" class="select-control"
+              style="width:200px;padding:6px 12px;font-size:13px"
+              onchange="filterOccupants()">
+              <option value="">— ทุก Ward —</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="loadOccupants()">🔄 รีเฟรช</button>
+          </div>
+        </div>
+
+        <!-- split panel -->
+        <div class="current-split">
+          <!-- LEFT: occupants -->
+          <div class="current-left" id="occupantsPanel">
+            <div class="empty-state">
+              <div class="empty-icon">🛏️</div><p>กำลังโหลด...</p>
+            </div>
+          </div>
+          <!-- RIGHT: bookings for selected bed -->
+          <div class="current-right" id="bookingsPanel">
+            <div class="right-placeholder">
+              <div style="font-size:36px;opacity:.25">📋</div>
+              <p style="color:#90A4AE;margin-top:8px;font-size:14px">เลือกเตียงด้านซ้าย<br>เพื่อดูการจอง</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: ALL QUEUE (waiting + reserved combined) ===== -->
+      <div class="tab-panel" id="panel-allrooms">
+        <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden">
+          <div class="section-header" style="flex-wrap:wrap;gap:10px">
+            <h3>🏨 ชื่อผู้จองและรอคิวทั้งหมด <span style="font-size:13px;font-weight:400;color:#90A4AE">(รอจัดการ)</span></h3>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select id="allQueueWardFilter" class="select-control"
+                style="width:220px;padding:6px 12px;font-size:13px"
+                onchange="filterAllQueue()">
+                <option value="">— ทุก Ward —</option>
+              </select>
+              <button class="btn btn-secondary btn-sm" onclick="loadAllQueue()">🔄 รีเฟรช</button>
+            </div>
+          </div>
+          <!-- status filter -->
+          <div style="padding:10px 20px;border-bottom:1px solid #F0F4F8;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:#546E7A;margin-right:4px">กรองสถานะ:</span>
+            <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500">
+              <input type="radio" name="allQueueFilter" value="all" checked onchange="filterAllQueue()"> ทั้งหมด
+            </label>
+            <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500">
+              <input type="radio" name="allQueueFilter" value="waiting" onchange="filterAllQueue()"> ⏳ ยังไม่ได้ห้อง
+            </label>
+            <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500">
+              <input type="radio" name="allQueueFilter" value="reserved" onchange="filterAllQueue()"> ✅ ได้ห้องแล้ว รอเข้าพัก
+            </label>
+          </div>
+          <div id="allQueueTableWrap" style="padding:20px">
+            <div class="empty-state">
+              <div class="empty-icon">🏨</div>
+              <p>กำลังโหลดข้อมูล...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: SETTINGS ===== -->
+      <div class="tab-panel" id="panel-settings">
+        <div style="display:flex;flex-direction:column;gap:20px">
+
+          <!-- กล่อง 3: ประเภทห้อง (HIS) -->
+          <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden">
+            <div class="section-header collapsible-header" onclick="toggleHisRoomtypes()" style="cursor:pointer;user-select:none">
+              <h3>🏨 ประเภทห้อง (HIS)(roomtype) ที่เป็นห้องพิเศษที่จะให้ใช้ระบบจองห้องพิเศษ</h3>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="btn btn-secondary btn-sm" id="hisRtRefreshBtn"
+                  onclick="event.stopPropagation();loadHisRoomtypes()" style="display:none">🔄 รีเฟรช</button>
+                <span id="hisRoomtypesChevron" style="font-size:20px;color:#90A4AE;transition:transform .25s;line-height:1">▶</span>
+              </div>
+            </div>
+            <div id="hisRoomtypesContainer" style="display:none">
+              <div id="hisRoomtypesWrap" style="padding:16px 20px">
+                <div class="empty-state"><p>กำลังโหลด...</p></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- กล่อง: ประเภทผู้จอง (HIS) -->
+          <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden">
+            <div class="section-header collapsible-header" onclick="togglePriorityTypes()" style="cursor:pointer;user-select:none">
+              <h3>👤 ประเภทผู้จอง (room_priority_type)</h3>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="btn btn-secondary btn-sm" id="ptRefreshBtn"
+                  onclick="event.stopPropagation();loadPriorityTypes()" style="display:none">🔄 รีเฟรช</button>
+                <span id="priorityTypesChevron" style="font-size:20px;color:#90A4AE;transition:transform .25s;line-height:1">▶</span>
+              </div>
+            </div>
+            <div id="priorityTypesContainer" style="display:none">
+              <div id="priorityTypesWrap" style="padding:16px 20px">
+                <div class="empty-state"><p>กำลังโหลด...</p></div>
+              </div>
+              <!-- Add form -->
+              <div style="padding:0 20px 20px;display:flex;gap:8px;align-items:center">
+                <input type="text" id="newPriorityTypeName" class="form-control"
+                  placeholder="ชื่อประเภทผู้จองใหม่"
+                  style="max-width:320px"
+                  onkeydown="if(event.key==='Enter')addPriorityType()">
+                <button class="btn btn-primary btn-sm" onclick="addPriorityType()">+ เพิ่ม</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- กล่อง 2: สถานะการจอง -->
+          <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden">
+            <div class="section-header collapsible-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.collapse-arrow').textContent=this.nextElementSibling.style.display==='none'?'▶':'▼'" style="cursor:pointer;user-select:none">
+              <h3>📋 ตั้งค่าสถานะการจอง(ฟิกไว้)</h3>
+              <span class="collapse-arrow" style="font-size:12px;color:#90A4AE">▶</span>
+            </div>
+            <div style="padding:16px 20px;display:none">
+              <table class="config-table">
+                <thead>
+                  <tr>
+                    <th>รหัสสถานะ</th>
+                    <th>ชื่อแสดงผล</th>
+                    <th>สี</th>
+                    <th>ความหมาย</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code class="status-code">reserved</code></td>
+                    <td><strong>จองแล้ว</strong></td>
+                    <td><span class="status-chip chip-reserved">จองแล้ว</span></td>
+                    <td>ห้องถูกจองไว้ ผู้ป่วยยังไม่เข้าพัก</td>
+                  </tr>
+                  <tr>
+                    <td><code class="status-code">occupied</code></td>
+                    <td><strong>เข้าพักแล้ว</strong></td>
+                    <td><span class="status-chip chip-occupied">เข้าพักแล้ว</span></td>
+                    <td>ผู้ป่วยเข้าพักในห้องแล้ว</td>
+                  </tr>
+
+                  <tr>
+                    <td><code class="status-code">cancelled</code></td>
+                    <td><strong>ยกเลิก</strong></td>
+                    <td><span class="status-chip chip-cancelled">ยกเลิก</span></td>
+                    <td>การจองถูกยกเลิก</td>
+                  </tr>
+                  <tr>
+                    <td><code class="status-code">waiting</code></td>
+                    <td><strong>รอคิว</strong></td>
+                    <td><span class="status-chip chip-waiting">รอคิว</span></td>
+                    <td>ผู้ป่วยอยู่ในคิวรอห้องพัก ยังไม่มีห้องว่าง</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- กล่อง 4: สถานะการจองจาก HIS (room_reserve_status) -->
+          <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden">
+            <div class="section-header collapsible-header" onclick="toggleReserveStatuses()" style="cursor:pointer;user-select:none">
+              <h3>🔖 สถานะการจองจาก HIS (room_reserve_status)</h3>
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="btn btn-secondary btn-sm" id="hisRsRefreshBtn"
+                  onclick="event.stopPropagation();loadReserveStatuses()" style="display:none">🔄 รีเฟรช</button>
+                <span id="reserveStatusesChevron" style="font-size:20px;color:#90A4AE;transition:transform .25s;line-height:1">▶</span>
+              </div>
+            </div>
+            <div id="reserveStatusesContainer" style="display:none">
+              <div id="reserveStatusesWrap" style="padding:16px 20px">
+                <div class="empty-state"><p>กำลังโหลด...</p></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div><!-- /page-content -->
+  </div><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<!-- Modal: Room Detail / Quick Action -->
+<div class="modal-overlay" id="roomModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title" id="roomModalTitle">รายละเอียดห้อง</div>
+      <button class="modal-close" onclick="closeModal('roomModal')">✕</button>
+    </div>
+    <div id="roomModalBody"></div>
+    <div class="modal-footer" id="roomModalFooter"></div>
+  </div>
+</div>
+
+<!-- Modal: Assign Room from Waitlist -->
+<div class="modal-overlay" id="assignModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">🏨 จัดห้องให้ผู้ป่วย</div>
+      <button class="modal-close" onclick="closeModal('assignModal')">✕</button>
+    </div>
+    <div id="assignModalBody">
+      <div class="form-group">
+        <label>เลือกห้องที่ว่าง <span class="required-star">*</span></label>
+        <select id="assignRoomId" class="select-control"></select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>วันที่เข้าพัก <span class="required-star">*</span></label>
+          <input type="datetime-local" id="assignCheckIn" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>วันที่กำหนดออก</label>
+          <input type="datetime-local" id="assignCheckOut" class="form-control">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('assignModal')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="confirmAssign()">✅ ยืนยันจัดห้อง</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Check-in Confirm -->
+<div class="modal-overlay" id="checkinModal">
+  <div class="modal-box" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">🏨 ยืนยันเข้าพักห้องพิเศษ</div>
+      <button class="modal-close" onclick="closeModal('checkinModal')">✕</button>
+    </div>
+    <div style="padding:20px 24px">
+      <p style="font-size:14px;color:#37474F;margin:0 0 16px">ยืนยันการเข้าพักสำหรับผู้ป่วยต่อไปนี้?</p>
+      <div style="background:#F5F7FA;border-radius:10px;padding:14px 16px;font-size:14px;line-height:2">
+        <div><span style="color:#90A4AE;min-width:90px;display:inline-block">ชื่อ-สกุล:</span> <strong id="checkinPatientName">-</strong></div>
+        <div><span style="color:#90A4AE;min-width:90px;display:inline-block">ห้อง:</span> <strong id="checkinRoomNumber">-</strong></div>
+      </div>
+      <p style="font-size:13px;color:#E53935;margin:14px 0 0">สถานะจะเปลี่ยนเป็น <strong>เข้าพักแล้ว</strong></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('checkinModal')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="confirmCheckin()">✅ ยืนยันเข้าพักห้องพิเศษ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: HN Patient Search -->
+<div class="modal-overlay" id="hnSearchModal">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title">🔍 ค้นหาผู้ป่วย (HN)</div>
+      <button class="modal-close" onclick="closeModal('hnSearchModal')">✕</button>
+    </div>
+    <div class="search-modal-input-row">
+      <input type="text" id="hnSearchInput" class="form-control" placeholder="พิมพ์ HN หรือชื่อ-สกุล..."
+        oninput="debounceSearch('hn')" onkeydown="if(event.key==='Enter')runPatientSearch()">
+      <button class="btn btn-primary" onclick="runPatientSearch()">ค้นหา</button>
+    </div>
+    <div id="hnSearchResults" class="search-result-list"></div>
+  </div>
+</div>
+
+<!-- Modal: Room Type Add/Edit -->
+<div class="modal-overlay" id="roomTypeModal">
+  <div class="modal-box" style="max-width:500px">
+    <div class="modal-header">
+      <div class="modal-title" id="roomTypeModalTitle">เพิ่มประเภทห้อง</div>
+      <button class="modal-close" onclick="closeModal('roomTypeModal')">✕</button>
+    </div>
+    <input type="hidden" id="rtId">
+    <div class="form-group">
+      <label>ชื่อประเภทห้อง <span class="required-star">*</span></label>
+      <input type="text" id="rtName" class="form-control" placeholder="เช่น ห้องเดี่ยวมาตรฐาน">
+    </div>
+    <div class="form-group">
+      <label>คำอธิบาย</label>
+      <textarea id="rtDesc" class="form-control" rows="2" placeholder="รายละเอียดของประเภทห้อง"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>ราคาค่าห้อง/วัน (บาท)</label>
+        <input type="number" id="rtPrice" class="form-control" placeholder="0" min="0" step="100">
+      </div>
+      <div class="form-group">
+        <label>ค่าอาหาร/วัน (บาท)</label>
+        <input type="number" id="rtFoodPrice" class="form-control" placeholder="0" min="0" step="50">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('roomTypeModal')">ยกเลิก</button>
+      <button class="btn btn-success" style="flex:none;width:auto;padding:10px 24px" onclick="saveRoomType()">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: AN Admission Search -->
+<div class="modal-overlay" id="anSearchModal">
+  <div class="modal-box" style="max-width:560px">
+    <div class="modal-header">
+      <div class="modal-title">🔍 ค้นหา Admission (AN)</div>
+      <button class="modal-close" onclick="closeModal('anSearchModal')">✕</button>
+    </div>
+    <div class="search-modal-input-row">
+      <input type="text" id="anSearchInput" class="form-control" placeholder="พิมพ์ AN, HN หรือชื่อ-สกุล..."
+        oninput="debounceSearch('an')" onkeydown="if(event.key==='Enter')runAnSearch()">
+      <button class="btn btn-primary" onclick="runAnSearch()">ค้นหา</button>
+    </div>
+    <div id="anSearchResults" class="search-result-list"></div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

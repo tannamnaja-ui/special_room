@@ -1,0 +1,8 @@
+node_modules/
+*.env
+.env
+settings.json
+logs/
+*.log
+พร้อม/
+config/connection.json

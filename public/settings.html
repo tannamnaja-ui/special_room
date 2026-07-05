@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ตั้งค่าการเชื่อมต่อ - ระบบจองห้องพิเศษ</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="settings-page">
+    <div class="settings-card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+        <span style="font-size:32px">🔌</span>
+        <div>
+          <h2>ตั้งค่าการเชื่อมต่อฐานข้อมูล</h2>
+          <p class="subtitle">กำหนดการเชื่อมต่อกับฐานข้อมูลของระบบโรงพยาบาล</p>
+        </div>
+      </div>
+
+      <div id="alertBox" style="display:none;margin-bottom:16px"></div>
+
+      <!-- DB Type Selector -->
+      <div class="form-group">
+        <label>เลือกประเภทฐานข้อมูล <span class="required-star">*</span></label>
+        <div class="db-type-selector">
+          <div class="db-type-btn active" id="btn-mysql" onclick="selectDb('mysql')">
+            <div class="db-icon">🐬</div>
+            <div class="db-name">MySQL</div>
+            <div class="db-desc">Port default: 3306</div>
+          </div>
+          <div class="db-type-btn" id="btn-postgresql" onclick="selectDb('postgresql')">
+            <div class="db-icon">🐘</div>
+            <div class="db-name">PostgreSQL</div>
+            <div class="db-desc">Port default: 5432</div>
+          </div>
+        </div>
+        <input type="hidden" id="db_type" value="mysql">
+      </div>
+
+      <form id="settingsForm" autocomplete="off">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="host">IP Server / Hostname <span class="required-star">*</span></label>
+            <input type="text" id="host" class="form-control" placeholder="เช่น 192.168.1.100" value="localhost">
+          </div>
+          <div class="form-group">
+            <label for="port">Port <span class="required-star">*</span></label>
+            <input type="number" id="port" class="form-control" placeholder="3306" value="3306">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="database">ชื่อฐานข้อมูล (Database) <span class="required-star">*</span></label>
+          <input type="text" id="database" class="form-control" placeholder="เช่น hospdb, his_db">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="db_username">Username <span class="required-star">*</span></label>
+            <input type="text" id="db_username" class="form-control" placeholder="root / postgres">
+          </div>
+          <div class="form-group">
+            <label for="db_password">Password</label>
+            <div style="position:relative">
+              <input type="password" id="db_password" class="form-control" placeholder="รหัสผ่านฐานข้อมูล"
+                style="padding-right:44px">
+              <button type="button" onclick="toggleDbPwd()"
+                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:#90A4AE">
+                👁
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-actions">
+          <button type="button" class="btn btn-secondary" id="testBtn" onclick="testConnection()">
+            🔍 ทดสอบการเชื่อมต่อ
+          </button>
+          <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveConnection()">
+            💾 บันทึกข้อมูลเชื่อมต่อ
+          </button>
+        </div>
+      </form>
+
+      <!-- ตรวจสอบตาราง waiting_list -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
+          <div>
+            <div style="font-weight:600;font-size:14px;color:#37474F">📋 ตรวจสอบตาราง waiting_list</div>
+            <div style="font-size:12px;color:#90A4AE;margin-top:2px">ตรวจสอบตารางและฟิลด์ที่จำเป็นสำหรับระบบคิวรอ</div>
+          </div>
+          <button id="createWaitlistBtn" class="btn btn-sm" onclick="createWaitlistTable()" disabled
+            style="min-width:140px;background:#ECEFF1;color:#90A4AE;border:none;cursor:not-allowed">
+            ⏳ ตรวจสอบ...
+          </button>
+        </div>
+        <div id="waitlistCheckMsg" style="font-size:12px;color:#546E7A;min-height:18px"></div>
+      </div>
+
+      <!-- เพิ่มฟิลด์ roomtype_reserve -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">
+          <div>
+            <div style="font-weight:600;font-size:14px;color:#37474F">🛠️ เพิ่มฟิลด์ระบบ</div>
+            <div style="font-size:12px;color:#90A4AE;margin-top:2px">ตรวจสอบฟิลด์ที่จำเป็นในตาราง <code style="background:#F0F4F8;padding:1px 5px;border-radius:3px;font-size:11px">roomtype_reserve</code></div>
+          </div>
+          <button id="addFieldsBtn" class="btn btn-sm" onclick="addFields()" disabled
+            style="min-width:120px;background:#ECEFF1;color:#90A4AE;border:none;cursor:not-allowed">
+            ⏳ ตรวจสอบ...
+          </button>
+        </div>
+        <div id="fieldCheckMsg" style="font-size:12px;color:#546E7A;min-height:18px"></div>
+      </div>
+
+      <div style="margin-top:16px;text-align:center">
+        <button class="btn btn-link" onclick="location.href='/login.html'">
+          ← กลับหน้า Login
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let selectedDb = 'mysql';
+
+    function selectDb(type) {
+      selectedDb = type;
+      document.getElementById('db_type').value = type;
+      document.getElementById('btn-mysql').classList.toggle('active', type === 'mysql');
+      document.getElementById('btn-postgresql').classList.toggle('active', type === 'postgresql');
+      document.getElementById('port').value = type === 'mysql' ? '3306' : '5432';
+    }
+
+    function toggleDbPwd() {
+      const f = document.getElementById('db_password');
+      f.type = f.type === 'password' ? 'text' : 'password';
+    }
+
+    function showAlert(msg, type = 'error') {
+      const box = document.getElementById('alertBox');
+      const icons = { error: '❌', success: '✅', warning: '⚠️', info: 'ℹ️' };
+      box.className = `alert alert-${type}`;
+      box.innerHTML = `${icons[type]} ${msg}`;
+      box.style.display = 'flex';
+    }
+
+    function getFormData() {
+      return {
+        db_type: selectedDb,
+        host: document.getElementById('host').value.trim(),
+        port: document.getElementById('port').value.trim(),
+        database: document.getElementById('database').value.trim(),
+        username: document.getElementById('db_username').value.trim(),
+        password: document.getElementById('db_password').value
+      };
+    }
+
+    function validate(data) {
+      if (!data.host) return 'กรุณากรอก IP Server';
+      if (!data.port) return 'กรุณากรอก Port';
+      if (!data.database) return 'กรุณากรอกชื่อฐานข้อมูล';
+      if (!data.username) return 'กรุณากรอก Username';
+      return null;
+    }
+
+    async function testConnection() {
+      const data = getFormData();
+      const err = validate(data);
+      if (err) return showAlert(err);
+
+      const btn = document.getElementById('testBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังทดสอบ...';
+      document.getElementById('alertBox').style.display = 'none';
+
+      try {
+        const res = await fetch('/api/auth/test-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        showAlert(result.message, result.success ? 'success' : 'error');
+      } catch (e) {
+        showAlert('ไม่สามารถเชื่อมต่อ server ได้');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔍 ทดสอบการเชื่อมต่อ';
+      }
+    }
+
+    async function saveConnection() {
+      const data = getFormData();
+      const err = validate(data);
+      if (err) return showAlert(err);
+
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังบันทึก...';
+
+      try {
+        const res = await fetch('/api/auth/save-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) {
+          showAlert('บันทึกการตั้งค่าเรียบร้อย กำลังกลับหน้า Login...', 'success');
+          setTimeout(() => location.href = '/login.html', 1200);
+        } else {
+          showAlert(result.message || 'บันทึกไม่สำเร็จ');
+        }
+      } catch (e) {
+        showAlert('เกิดข้อผิดพลาด');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '💾 บันทึกข้อมูลเชื่อมต่อ';
+      }
+    }
+
+    async function checkWaitlistTable() {
+      const btn = document.getElementById('createWaitlistBtn');
+      const msg = document.getElementById('waitlistCheckMsg');
+      try {
+        const res  = await fetch('/api/auth/check-waitlist-table');
+        const data = await res.json();
+        if (!data.success) {
+          btn.disabled = true;
+          btn.style.cssText = 'min-width:140px;background:#ECEFF1;color:#90A4AE;border:none;cursor:not-allowed';
+          btn.textContent = '⚠️ ตรวจสอบไม่ได้';
+          msg.innerHTML = `<span style="color:#F57F17">⚠️ ${data.message}</span>`;
+          return;
+        }
+        if (!data.table_exists) {
+          btn.disabled = false;
+          btn.style.cssText = 'min-width:140px;background:#F57F17;color:#fff;border:none;cursor:pointer;font-weight:700';
+          btn.textContent = '➕ สร้างตาราง';
+          msg.innerHTML = '<span style="color:#E65100">⚠️ ยังไม่มีตาราง <strong>waiting_list</strong></span>';
+        } else if (data.all_exist) {
+          btn.disabled = true;
+          btn.style.cssText = 'min-width:140px;background:#ECEFF1;color:#90A4AE;border:none;cursor:not-allowed';
+          btn.textContent = '✅ ครบแล้ว';
+          msg.innerHTML = '<span style="color:#2E7D32">✅ มีตารางและฟิลด์ครบทุกฟิลด์แล้ว</span>';
+        } else {
+          btn.disabled = false;
+          btn.style.cssText = 'min-width:140px;background:#F57F17;color:#fff;border:none;cursor:pointer;font-weight:700';
+          btn.textContent = '➕ เพิ่มฟิลด์';
+          msg.innerHTML = `<span style="color:#E65100">⚠️ ยังขาดฟิลด์: <strong>${data.missing_cols.join(', ')}</strong></span>`;
+        }
+      } catch (e) {
+        btn.textContent = '⚠️ ตรวจสอบไม่ได้';
+        msg.innerHTML = `<span style="color:#C62828">ตรวจสอบไม่สำเร็จ: ${e.message}</span>`;
+      }
+    }
+
+    async function createWaitlistTable() {
+      const btn = document.getElementById('createWaitlistBtn');
+      const msg = document.getElementById('waitlistCheckMsg');
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังดำเนินการ...';
+      try {
+        const res  = await fetch('/api/auth/create-waitlist-table', { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        msg.innerHTML = '<span style="color:#2E7D32">✅ สร้าง/อัปเดตตารางสำเร็จ</span>';
+        await checkWaitlistTable();
+      } catch (e) {
+        msg.innerHTML = `<span style="color:#C62828">❌ ไม่สำเร็จ: ${e.message}</span>`;
+        btn.disabled = false;
+        btn.textContent = '➕ ลองใหม่';
+      }
+    }
+
+    async function checkFields() {
+      const btn = document.getElementById('addFieldsBtn');
+      const msg = document.getElementById('fieldCheckMsg');
+      try {
+        const res  = await fetch('/api/auth/check-rt-fields');
+        const data = await res.json();
+
+        if (!data.success) {
+          btn.disabled = true;
+          btn.style.cssText = 'min-width:120px;background:#ECEFF1;color:#90A4AE;border:none;cursor:not-allowed';
+          btn.textContent = '⚠️ เพิ่มฟิล';
+          msg.innerHTML = `<span style="color:#F57F17">⚠️ ${data.message}</span>`;
+          return;
+        }
+
+        if (data.all_exist) {
+          btn.disabled = true;
+          btn.style.cssText = 'min-width:120px;background:#ECEFF1;color:#90A4AE;border:none;cursor:not-allowed';
+          btn.textContent = '✅ ฟิลด์ครบแล้ว';
+          msg.innerHTML = '<span style="color:#2E7D32">✅ มีฟิลด์ครบทุกฟิลด์แล้ว (ward, deposit, est_dch_date, bedno)</span>';
+        } else {
+          btn.disabled = false;
+          btn.style.cssText = 'min-width:120px;background:#F57F17;color:#fff;border:none;cursor:pointer;font-weight:700';
+          btn.textContent = '➕ เพิ่มฟิล';
+          msg.innerHTML = `<span style="color:#E65100">⚠️ ยังขาดฟิลด์: <strong>${data.missing.join(', ')}</strong></span>`;
+        }
+      } catch (e) {
+        btn.textContent = '⚠️ เพิ่มฟิล';
+        msg.innerHTML = `<span style="color:#C62828">ตรวจสอบไม่สำเร็จ: ${e.message}</span>`;
+      }
+    }
+
+    async function addFields() {
+      const btn = document.getElementById('addFieldsBtn');
+      const msg = document.getElementById('fieldCheckMsg');
+      btn.disabled = true;
+      btn.textContent = '⏳ กำลังเพิ่มฟิล...';
+      try {
+        const res  = await fetch('/api/auth/add-rt-fields', { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        msg.innerHTML = `<span style="color:#2E7D32">✅ เพิ่มฟิลด์สำเร็จ: <strong>${data.added.join(', ')}</strong></span>`;
+        await checkFields();
+      } catch (e) {
+        msg.innerHTML = `<span style="color:#C62828">❌ เพิ่มฟิลด์ไม่สำเร็จ: ${e.message}</span>`;
+        btn.disabled = false;
+        btn.textContent = '➕ เพิ่มฟิล';
+      }
+    }
+
+    async function loadExisting() {
+      try {
+        const res = await fetch('/api/auth/connection-settings');
+        const data = await res.json();
+        if (data.configured && data.settings) {
+          const s = data.settings;
+          selectDb(s.db_type || 'mysql');
+          document.getElementById('host').value = s.host || '';
+          document.getElementById('port').value = s.port || '';
+          document.getElementById('database').value = s.database || '';
+          document.getElementById('db_username').value = s.username || '';
+        }
+      } catch {}
+      await checkWaitlistTable();
+      await checkFields();
+    }
+
+    loadExisting();
+  </script>
+</body>
+</html>
