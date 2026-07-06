@@ -694,7 +694,7 @@ async function submitBooking() {
       switchTab('reservations');
       refreshAllData();
     } else {
-      toast(data.message, 'error');
+      toast(data.message, data.type || 'error');
     }
   } catch (e) {
     toast('เกิดข้อผิดพลาดในการบันทึก', 'error');

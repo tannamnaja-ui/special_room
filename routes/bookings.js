@@ -146,22 +146,34 @@ router.get('/ward-by-an/:an', authCheck, async (req, res) => {
   }
 });
 
-// Search patient rights by HN — ดึงจาก ipt.pttype (admission ล่าสุด)
+// Search patient rights by HN — ดึงจาก patient_pttype.pttype (สิทธิปัจจุบันของผู้ป่วย)
 router.get('/rights/:hn', authCheck, async (req, res) => {
   const cfg = loadSettings();
   const { hn } = req.params;
   try {
-    // 1) admission ที่ยังอยู่โรงพยาบาล (dchdate IS NULL)
+    // 1) ดึงจาก patient_pttype (สิทธิปัจจุบันที่ลงทะเบียนไว้)
     let rows = await query(
-      `SELECT i.pttype AS rights_type, p.name AS rights_name
-       FROM ipt i
-       LEFT JOIN pttype p ON p.pttype = i.pttype
-       WHERE i.hn = $1 AND i.dchdate IS NULL
-       ORDER BY i.regdate DESC LIMIT 1`,
+      `SELECT pp.pttype AS rights_type, p.name AS rights_name
+       FROM patient_pttype pp
+       LEFT JOIN pttype p ON p.pttype = pp.pttype
+       WHERE pp.hn = $1
+       ORDER BY pp.date_start DESC LIMIT 1`,
       [hn], cfg
     );
 
-    // 2) fallback — admission ล่าสุดแม้จำหน่ายแล้ว
+    // 2) fallback — admission ที่ยังอยู่โรงพยาบาล (dchdate IS NULL)
+    if (!rows || rows.length === 0 || !rows[0].rights_type) {
+      rows = await query(
+        `SELECT i.pttype AS rights_type, p.name AS rights_name
+         FROM ipt i
+         LEFT JOIN pttype p ON p.pttype = i.pttype
+         WHERE i.hn = $1 AND i.dchdate IS NULL
+         ORDER BY i.regdate DESC LIMIT 1`,
+        [hn], cfg
+      );
+    }
+
+    // 3) fallback สุดท้าย — admission ล่าสุดแม้จำหน่ายแล้ว
     if (!rows || rows.length === 0 || !rows[0].rights_type) {
       rows = await query(
         `SELECT i.pttype AS rights_type, p.name AS rights_name
@@ -389,7 +401,7 @@ router.post('/', authCheck, async (req, res) => {
       ? await query(`SELECT id FROM bookings WHERE room_id = $1 AND status IN ('reserved','occupied') LIMIT 1`, [room_id], cfg)
       : await query(`SELECT id FROM bookings WHERE room_number = $1 AND status IN ('reserved','occupied') LIMIT 1`, [room_number], cfg);
     if (dupRows && dupRows.length > 0)
-      return res.status(409).json({ success: false, message: 'ห้องนี้ถูกจองแล้ว กรุณาเลือกห้องอื่นหรือเพิ่มในคิวรอ' });
+      return res.status(409).json({ success: false, message: 'กรุณาเลือกห้องที่จะจอง ถ้ายังไม่มีห้องกรุณาเพิ่มในคิวรอ', type: 'warning' });
 
     // Insert booking (without booking_ref first)
     await query(
