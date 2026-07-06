@@ -99,7 +99,7 @@ router.get('/info-by-an/:an', authCheck, async (req, res) => {
   try {
     const [wardRows, doctorRows, rightsRows] = await Promise.all([
       query(
-        `SELECT w.name as ward_name FROM ipt i LEFT OUTER JOIN ward w ON w.ward = i.ward WHERE i.an = $1 LIMIT 1`,
+        `SELECT w.name as ward_name FROM ipt i LEFT OUTER JOIN ward w ON w.ward = i.ward WHERE i.an = $1 AND w.ward_active = 'Y' LIMIT 1`,
         [an], cfg
       ),
       query(
@@ -135,7 +135,7 @@ router.get('/ward-by-an/:an', authCheck, async (req, res) => {
   const { an } = req.params;
   try {
     const rows = await query(
-      `SELECT w.name as ward_name FROM ipt i LEFT OUTER JOIN ward w ON w.ward = i.ward WHERE i.an = $1 LIMIT 1`,
+      `SELECT w.name as ward_name FROM ipt i LEFT OUTER JOIN ward w ON w.ward = i.ward WHERE i.an = $1 AND w.ward_active = 'Y' LIMIT 1`,
       [an], cfg
     );
     if (rows && rows.length > 0 && rows[0].ward_name)
@@ -146,37 +146,39 @@ router.get('/ward-by-an/:an', authCheck, async (req, res) => {
   }
 });
 
-// Search patient rights by HN
+// Search patient rights by HN — ดึงจาก ipt.pttype (admission ล่าสุด)
 router.get('/rights/:hn', authCheck, async (req, res) => {
   const cfg = loadSettings();
   const { hn } = req.params;
   try {
-    let rights = null;
-    const queries = [
-      `SELECT hn, main_right as rights_type FROM patient_pttype WHERE hn = $1 AND del = 'N' ORDER BY id DESC LIMIT 1`,
-      `SELECT hn, pttype as rights_type FROM pt_pttype WHERE hn = $1 LIMIT 1`,
-      `SELECT hn, pttype as rights_type FROM patient WHERE hn = $1 LIMIT 1`,
-    ];
-    for (const sql of queries) {
-      try {
-        const rows = await query(sql, [hn], cfg);
-        if (rows && rows.length > 0) { rights = rows[0]; break; }
-      } catch {}
+    // 1) admission ที่ยังอยู่โรงพยาบาล (dchdate IS NULL)
+    let rows = await query(
+      `SELECT i.pttype AS rights_type, p.name AS rights_name
+       FROM ipt i
+       LEFT JOIN pttype p ON p.pttype = i.pttype
+       WHERE i.hn = $1 AND i.dchdate IS NULL
+       ORDER BY i.regdate DESC LIMIT 1`,
+      [hn], cfg
+    );
+
+    // 2) fallback — admission ล่าสุดแม้จำหน่ายแล้ว
+    if (!rows || rows.length === 0 || !rows[0].rights_type) {
+      rows = await query(
+        `SELECT i.pttype AS rights_type, p.name AS rights_name
+         FROM ipt i
+         LEFT JOIN pttype p ON p.pttype = i.pttype
+         WHERE i.hn = $1
+         ORDER BY i.regdate DESC LIMIT 1`,
+        [hn], cfg
+      );
     }
-    if (rights) {
-      try {
-        const nameRows = await query(
-          `SELECT pttype, name FROM pttype WHERE pttype = $1 LIMIT 1`,
-          [rights.rights_type], cfg
-        );
-        if (nameRows?.[0]?.name) {
-          rights.rights_display = [nameRows[0].pttype, nameRows[0].name].filter(Boolean).join(' ');
-        } else {
-          rights.rights_display = rights.rights_type;
-        }
-      } catch { rights.rights_display = rights.rights_type; }
-      return res.json({ success: true, rights });
+
+    if (rows && rows.length > 0 && rows[0].rights_type) {
+      const r = rows[0];
+      r.rights_display = [r.rights_type, r.rights_name].filter(Boolean).join(' ');
+      return res.json({ success: true, rights: r });
     }
+
     res.json({ success: false, message: 'ไม่พบข้อมูลสิทธิ์การรักษา' });
   } catch (err) {
     res.json({ success: false, message: err.message });
@@ -260,6 +262,7 @@ router.get('/his-wards', authCheck, async (req, res) => {
       LEFT OUTER JOIN roomno r ON r.roomtype = rt.roomtype
       LEFT OUTER JOIN ward w ON w.ward = r.ward
       WHERE rt.hos_guid = 'Y'
+        AND w.ward_active = 'Y'
       GROUP BY w.ward, w.name
       ORDER BY w.name
     `, [], cfg);
