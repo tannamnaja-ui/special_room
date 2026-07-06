@@ -151,15 +151,21 @@ router.get('/rights/:hn', authCheck, async (req, res) => {
   const cfg = loadSettings();
   const { hn } = req.params;
   try {
-    // 1) ดึงจาก patient_pttype (สิทธิปัจจุบันที่ลงทะเบียนไว้)
-    let rows = await query(
-      `SELECT pp.pttype AS rights_type, p.name AS rights_name
-       FROM patient_pttype pp
-       LEFT JOIN pttype p ON p.pttype = pp.pttype
-       WHERE pp.hn = $1
-       ORDER BY pp.date_start DESC LIMIT 1`,
-      [hn], cfg
-    );
+    let rows = null;
+
+    // 1) ดึงจาก patient_pttype — ครอบ try-catch แยก เพราะตารางอาจไม่มีในบาง HIS
+    try {
+      rows = await query(
+        `SELECT pp.pttype AS rights_type, p.name AS rights_name
+         FROM patient_pttype pp
+         LEFT JOIN pttype p ON p.pttype = pp.pttype
+         WHERE pp.hn = $1
+         ORDER BY pp.date_start DESC LIMIT 1`,
+        [hn], cfg
+      );
+    } catch (_) {
+      rows = null;
+    }
 
     // 2) fallback — admission ที่ยังอยู่โรงพยาบาล (dchdate IS NULL)
     if (!rows || rows.length === 0 || !rows[0].rights_type) {
