@@ -67,6 +67,7 @@ socket.on('waitlist_updated', () => refreshAllData());
 /* ===== TAB NAVIGATION ===== */
 const tabTitles = {
   dashboard:    '📊 แดชบอร์ดสถานะห้องพัก',
+  specrooms:    '🏠 ห้องพิเศษทั้งหมด',
   booking:      '📝 ฟอร์มจองห้องพิเศษ',
   reservations: '📋 รายชื่อผู้จองห้องพิเศษ (ได้ห้องแล้ว รอเข้าพัก)',
   waitlist:     '⏳ คิวรอห้องพัก (จองคิวไว้ ยังไม่ได้ห้อง)',
@@ -81,6 +82,7 @@ function switchTab(tab) {
   document.getElementById(`panel-${tab}`).classList.add('active');
   document.getElementById(`nav-${tab}`).classList.add('active');
   document.getElementById('topbarTitle').textContent = tabTitles[tab] || tab;
+  if (tab === 'specrooms')    loadSpecRooms();
   if (tab === 'allrooms')     loadAllQueue();
   if (tab === 'settings')     loadSettingsData();
   if (tab === 'reservations') loadReservations();
@@ -1363,6 +1365,63 @@ function renderAllQueue(list) {
     </table>`;
 }
 
+/* ===== SPEC ROOMS ALL (HIS beds) ===== */
+let specBedStatusFilter = 'all';
+
+async function loadSpecRooms() {
+  const container = document.getElementById('specRoomsHisContent');
+  if (!container) return;
+  if (allHosBeds.length > 0) {
+    populateSpecWardDropdown(allHosBeds);
+    updateSpecCountBar(allHosBeds);
+    filterSpecBeds();
+    return;
+  }
+  container.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto"></div><p style="margin-top:12px">กำลังโหลด...</p></div>`;
+  await loadHosBeds();
+}
+
+function populateSpecWardDropdown(beds) {
+  const sel = document.getElementById('specWardFilter');
+  if (!sel) return;
+  const current = sel.value;
+  const wards = [...new Set(beds.map(b => b.ward).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">— ทุก Ward —</option>';
+  wards.forEach(w => {
+    const opt = document.createElement('option');
+    opt.value = w; opt.textContent = w;
+    sel.appendChild(opt);
+  });
+  if (wards.includes(current)) sel.value = current;
+}
+
+function updateSpecCountBar(beds) {
+  const bar = document.getElementById('specCountBar');
+  if (!bar) return;
+  const ward = document.getElementById('specWardFilter')?.value || '';
+  const base = ward ? beds.filter(b => b.ward === ward) : beds;
+  const total = base.length;
+  const avail = base.filter(b => b.room_status === 'available').length;
+  const occup = base.filter(b => b.room_status === 'occupied').length;
+  bar.innerHTML = `รวม <b>${total}</b> ห้อง &nbsp;|&nbsp; 🟢 ว่าง <b>${avail}</b> &nbsp; 🔴 มีคนพัก <b>${occup}</b>`;
+}
+
+function setSpecFilter(status, el) {
+  specBedStatusFilter = status;
+  document.querySelectorAll('#panel-specrooms .spec-filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  filterSpecBeds();
+}
+
+function filterSpecBeds() {
+  const ward = document.getElementById('specWardFilter')?.value || '';
+  let filtered = allHosBeds;
+  if (ward) filtered = filtered.filter(b => b.ward === ward);
+  if (specBedStatusFilter !== 'all') filtered = filtered.filter(b => (b.room_status || 'unknown') === specBedStatusFilter);
+  updateSpecCountBar(allHosBeds);
+  renderBedsToContainer(filtered, 'specRoomsHisContent');
+}
+
 /* ===== HOS BED LAYOUT ===== */
 let allHosBeds = [];
 let currentBedStatusFilter = '';
@@ -1370,7 +1429,7 @@ let currentDashBedStatusFilter = '';
 
 async function loadHosBeds() {
   const container = document.getElementById('allRoomsContent');
-  container.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto"></div><p style="margin-top:12px">กำลังโหลด...</p></div>`;
+  if (container) container.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto"></div><p style="margin-top:12px">กำลังโหลด...</p></div>`;
   try {
     const [hosbedRes, occupantsRes] = await Promise.all([
       fetch('/api/rooms/hosbed'),
@@ -1419,10 +1478,19 @@ async function loadHosBeds() {
     renderBedsToContainer(allHosBeds, 'allRoomsContent');
     renderBedsToContainer(allHosBeds, 'dashAllRoomsContent');
     updateStatsByBeds(allHosBeds, document.getElementById('dashBedWardFilter')?.value || '');
+    // อัพเดท specrooms ถ้าแท็บเปิดอยู่
+    if (document.getElementById('panel-specrooms')?.classList.contains('active')) {
+      populateSpecWardDropdown(allHosBeds);
+      updateSpecCountBar(allHosBeds);
+      filterSpecBeds();
+    }
   } catch (e) {
-    container.innerHTML = `<div class="alert alert-error" style="margin:20px">❌ ไม่สามารถโหลดข้อมูลได้</div>`;
+    const errHtml = `<div class="alert alert-error" style="margin:20px">❌ ไม่สามารถโหลดข้อมูลได้</div>`;
+    if (container) container.innerHTML = errHtml;
     const dc = document.getElementById('dashAllRoomsContent');
-    if (dc) dc.innerHTML = container.innerHTML;
+    if (dc) dc.innerHTML = errHtml;
+    const sc = document.getElementById('specRoomsHisContent');
+    if (sc) sc.innerHTML = errHtml;
   }
 }
 

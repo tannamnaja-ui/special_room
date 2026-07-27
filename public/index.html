@@ -37,6 +37,10 @@
         <span class="nav-icon">📊</span>
         <span>แดชบอร์ด</span>
       </a>
+      <a class="nav-item" id="nav-specrooms" onclick="switchTab('specrooms')">
+        <span class="nav-icon">🏠</span>
+        <span>ห้องพิเศษทั้งหมด</span>
+      </a>
       <a class="nav-item" id="nav-booking" onclick="switchTab('booking')">
         <span class="nav-icon">📝</span>
         <span>ฟอร์มจองห้องพิเศษ</span>
@@ -146,10 +150,10 @@
           </div>
         </div>
 
-        <!-- ชื่อผู้จองและรอคิวทั้งหมด (Dashboard copy) -->
+        <!-- ห้องทั้งหมดสำหรับ monitor -->
         <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden;margin-top:4px">
           <div class="section-header" style="flex-wrap:wrap;gap:10px">
-            <h3>🏨 ชื่อผู้จองและรอคิวทั้งหมด <span style="font-size:13px;font-weight:400;color:#90A4AE">(รอจัดการ)</span></h3>
+            <h3>🖥️ ห้องทั้งหมดสำหรับ monitor</h3>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
               <select id="dashBedWardFilter" class="select-control"
                 style="width:220px;padding:6px 12px;font-size:13px"
@@ -167,6 +171,35 @@
           </div>
           <div id="dashAllRoomsContent" style="padding:20px">
             <div class="empty-state"><div class="empty-icon">🏨</div><p>กำลังโหลดข้อมูล...</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== TAB: SPECIAL ROOMS ALL ===== -->
+      <div class="tab-panel" id="panel-specrooms">
+        <div style="background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow:hidden">
+          <!-- Header -->
+          <div style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;border-bottom:1px solid #f0f4f8">
+            <h3 style="margin:0;font-size:16px;font-weight:700;color:#1565C0">🏠 ห้องพิเศษทั้งหมด (HIS)</h3>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select id="specWardFilter" onchange="filterSpecBeds()"
+                style="padding:6px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fafafa;min-width:160px">
+                <option value="">— ทุก Ward —</option>
+              </select>
+              <button onclick="loadSpecRooms()" style="padding:6px 14px;border:1px solid #1565C0;border-radius:8px;background:#fff;color:#1565C0;font-size:13px;cursor:pointer;font-weight:600">🔄 รีเฟรช</button>
+            </div>
+          </div>
+          <!-- Status filter chips -->
+          <div style="padding:12px 20px;display:flex;gap:8px;flex-wrap:wrap;background:#fafbfc;border-bottom:1px solid #f0f4f8">
+            <button class="spec-filter-btn active" onclick="setSpecFilter('all',this)">ทั้งหมด</button>
+            <button class="spec-filter-btn"         onclick="setSpecFilter('available',this)">🟢 เตียงว่าง</button>
+            <button class="spec-filter-btn"         onclick="setSpecFilter('occupied',this)">🔴 มีคนพัก</button>
+          </div>
+          <!-- Count bar -->
+          <div id="specCountBar" style="padding:8px 20px;font-size:12px;color:#90A4AE;background:#fafbfc;border-bottom:1px solid #f0f4f8"></div>
+          <!-- Content -->
+          <div id="specRoomsHisContent" style="padding:20px">
+            <div class="empty-state"><div class="empty-icon">🏠</div><p>กำลังโหลดข้อมูล...</p></div>
           </div>
         </div>
       </div>

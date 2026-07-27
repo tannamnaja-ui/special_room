@@ -275,6 +275,24 @@ body { font-family: 'Sarabun', 'Segoe UI', sans-serif; background: var(--bg); co
 .floor-tab:hover { border-color: var(--primary); color: var(--primary); }
 .floor-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 
+/* Spec-rooms status filter buttons */
+.spec-filter-btn {
+  padding: 5px 14px; border: 1.5px solid var(--border);
+  border-radius: 20px; background: #fff; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all .2s; color: var(--text-muted);
+}
+.spec-filter-btn:hover { border-color: var(--primary); color: var(--primary); }
+.spec-filter-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* Spec rooms group header */
+.spec-group-header {
+  font-size: 13px; font-weight: 700; color: #546E7A;
+  padding: 6px 0 8px; border-bottom: 2px solid #e3f2fd; margin-bottom: 12px;
+}
+.spec-rooms-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px;
+}
+
 /* Room grid */
 .rooms-grid {
   display: grid;
