@@ -5,6 +5,7 @@ const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
 
+const { loadSettings } = require('./config/db');
 const authRouter = require('./routes/auth');
 const roomsRouter = require('./routes/rooms');
 const bookingsRouter = require('./routes/bookings');
@@ -34,8 +35,11 @@ app.use('/api/rooms', roomsRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/waitlist', waitlistRouter);
 
-// Serve login as default
+// Serve login as default; redirect to settings if not configured yet
 app.get('/', (req, res) => {
+  if (!loadSettings()) {
+    return res.redirect('/settings.html');
+  }
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
