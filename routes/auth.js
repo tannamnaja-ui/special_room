@@ -21,7 +21,14 @@ router.post('/test-connection', async (req, res) => {
 // Save connection settings
 router.post('/save-connection', async (req, res) => {
   try {
-    saveSettings(req.body);
+    const newSettings = { ...req.body };
+    if (!newSettings.password) {
+      const existing = loadSettings();
+      if (existing && existing.password) {
+        newSettings.password = existing.password;
+      }
+    }
+    saveSettings(newSettings);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -32,7 +39,7 @@ router.post('/save-connection', async (req, res) => {
 router.get('/connection-settings', (req, res) => {
   const cfg = loadSettings();
   if (!cfg) return res.json({ configured: false });
-  const safe = { ...cfg, password: '' };
+  const safe = { ...cfg, password: '', has_password: !!cfg.password };
   res.json({ configured: true, settings: safe });
 });
 

@@ -334,6 +334,9 @@
           document.getElementById('port').value = s.port || '';
           document.getElementById('database').value = s.database || '';
           document.getElementById('db_username').value = s.username || '';
+          if (s.has_password) {
+            document.getElementById('db_password').placeholder = '(บันทึกแล้ว — เว้นว่างเพื่อคงรหัสเดิม)';
+          }
         }
       } catch {}
       await checkWaitlistTable();
