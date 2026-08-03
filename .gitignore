@@ -6,3 +6,7 @@ logs/
 *.log
 พร้อม/
 config/connection.json
+build/
+dist/
+installer/*.exe
+*.exe

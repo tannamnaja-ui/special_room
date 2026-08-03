@@ -1,0 +1,78 @@
+; Special Room System - Offline Full Installer
+; Bundles a pkg-compiled, self-contained Node.js server (no Node.js install needed)
+; plus a hidden-window C# launcher (no console window shown to the user).
+
+#define MyAppName "Special Room System"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "Hospital Private Room System"
+#define MyAppExeName "Launcher.exe"
+
+[Setup]
+AppId={{6C8F0B2E-6F1E-4E8B-9B8A-2B8F6D3B7E10}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+DefaultDirName={localappdata}\SpecialRoomSystem
+DefaultGroupName={#MyAppName}
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+OutputDir=..\dist
+OutputBaseFilename=Special_room-system-Setup-Full
+SetupIconFile=icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+DisableWelcomePage=no
+ArchitecturesInstallIn64BitMode=x64
+
+[Languages]
+Name: "thai"; MessagesFile: "compiler:Languages\Thai.isl"
+
+[Files]
+Source: "Launcher.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\server\special_room-server.exe"; DestDir: "{app}\server"; Flags: ignoreversion
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "เปิดใช้งาน {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// ลบ/ถอนการติดตั้งเวอร์ชันเดิมแบบเงียบก่อนติดตั้งเวอร์ชันใหม่ (ตรวจจากรีจิสทรีของ AppId เดียวกัน)
+function GetUninstallString(): String;
+var
+  sUnInstPath: String;
+  sUnInstallString: String;
+begin
+  sUnInstPath := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1';
+  sUnInstallString := '';
+  if not RegQueryStringValue(HKCU, sUnInstPath, 'UninstallString', sUnInstallString) then
+    RegQueryStringValue(HKLM, sUnInstPath, 'UninstallString', sUnInstallString);
+  Result := sUnInstallString;
+end;
+
+procedure KillServerIfRunning();
+var
+  ResultCode: Integer;
+begin
+  Exec('taskkill.exe', '/F /IM special_room-server.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM Launcher.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function InitializeSetup(): Boolean;
+var
+  sUnInstallString: String;
+  iResultCode: Integer;
+begin
+  Result := True;
+  KillServerIfRunning();
+  sUnInstallString := GetUninstallString();
+  if sUnInstallString <> '' then
+  begin
+    sUnInstallString := RemoveQuotes(sUnInstallString);
+    Exec(sUnInstallString, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, iResultCode);
+  end;
+end;

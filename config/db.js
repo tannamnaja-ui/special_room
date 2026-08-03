@@ -3,7 +3,13 @@ const path = require('path');
 const { Pool } = require('pg');
 const mysql = require('mysql2/promise');
 
-const SETTINGS_FILE = path.join(__dirname, 'connection.json');
+// เมื่อรันจาก pkg exe ต้องเก็บ connection.json ไว้นอก snapshot (เขียนไฟล์ไม่ได้)
+// จึงเก็บไว้ในโฟลเดอร์ config/ ข้าง .exe จริงแทน
+const CONFIG_DIR = process.pkg
+  ? path.join(path.dirname(process.execPath), 'config')
+  : __dirname;
+if (process.pkg && !fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+const SETTINGS_FILE = path.join(CONFIG_DIR, 'connection.json');
 
 function loadSettings() {
   if (!fs.existsSync(SETTINGS_FILE)) return null;
