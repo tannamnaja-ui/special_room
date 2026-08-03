@@ -284,8 +284,8 @@
           <div class="form-row" style="margin-bottom:12px">
             <div class="form-group">
               <label>หอผู้ป่วย</label>
-              <select id="bnWardFilter" class="select-control" onchange="filterRoomsByWard()">
-                <option value="">— ทุกหอผู้ป่วย —</option>
+              <select id="bnWardFilter" class="select-control" onchange="onWardFilterChange()">
+                <option value="">— เลือกหอผู้ป่วย —</option>
               </select>
             </div>
             <div class="form-group">
@@ -295,9 +295,15 @@
               </select>
             </div>
             <div class="form-group">
-              <label>ห้องที่ต้องการ</label>
-              <select id="bnRoomId" class="select-control" onchange="showRoomPrice()">
+              <label>ห้อง</label>
+              <select id="bnRoomNo" class="select-control" onchange="filterBedsByRoom()">
                 <option value="">-- เลือกห้อง --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>เตียง</label>
+              <select id="bnRoomId" class="select-control" onchange="showRoomPrice()">
+                <option value="">-- เลือกเตียง --</option>
               </select>
             </div>
             <div class="form-group">
@@ -308,12 +314,11 @@
             </div>
           </div>
 
-          <!-- ราคาค่าห้อง + ค่าอาหาร -->
+          <!-- ราคาห้องที่เลือก -->
           <div id="roomPriceBox" style="display:none;background:#F3E5F5;border-radius:10px;padding:12px 16px;margin-bottom:12px">
-            <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:14px">
-              <div class="info-row"><span class="info-label" style="min-width:90px">ค่าห้อง/วัน:</span><span class="info-value" id="priceRoom">-</span></div>
-              <div class="info-row"><span class="info-label" style="min-width:90px">ค่าอาหาร/วัน:</span><span class="info-value" id="priceFood">-</span></div>
-              <div class="info-row"><span class="info-label" style="min-width:90px">รวม/วัน:</span><span class="info-value" id="priceTotal" style="color:#C62828;font-size:15px">-</span></div>
+            <div style="font-size:14px">
+              <span class="info-label">ราคาห้องที่เลือก :</span>
+              <span class="info-value" id="priceTotal" style="color:#C62828;font-size:15px;font-weight:700">-</span> บาท
             </div>
           </div>
 

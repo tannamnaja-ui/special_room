@@ -290,66 +290,95 @@ router.get('/his-wards', authCheck, async (req, res) => {
   }
 });
 
-// GET all room types from HIS for booking form
+// GET room types from HIS for booking form — ward optional (filters to types that exist in that ward)
 router.get('/his-roomtypes', authCheck, async (req, res) => {
   const cfg = loadSettings();
+  const { ward } = req.query;
   try {
-    const rows = await query(`
-      SELECT roomtype, name FROM roomtype
-      WHERE hos_guid = 'Y'
-      ORDER BY name
-    `, [], cfg);
+    let sql, params;
+    if (ward) {
+      sql = `
+        SELECT DISTINCT rt.roomtype, rt.name
+        FROM roomtype rt
+        JOIN roomno r ON r.roomtype = rt.roomtype
+        WHERE rt.hos_guid = 'Y'
+          AND r.ward = $1
+        ORDER BY rt.name`;
+      params = [ward];
+    } else {
+      sql = `
+        SELECT roomtype, name FROM roomtype
+        WHERE hos_guid = 'Y'
+        ORDER BY name`;
+      params = [];
+    }
+    const rows = await query(sql, params, cfg);
     res.json({ success: true, roomtypes: rows });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// GET available beds from HIS — ward optional, roomtype required
-router.get('/his-beds', authCheck, async (req, res) => {
+// GET rooms from HIS for booking form — ward + roomtype required, only rooms with at least one available bed
+router.get('/his-rooms', authCheck, async (req, res) => {
   const cfg = loadSettings();
   const { ward, roomtype } = req.query;
+  if (!ward || !roomtype) return res.json({ success: true, rooms: [] });
+  try {
+    const rows = await query(`
+      SELECT r.roomno, r.name
+      FROM roomno r
+      JOIN bedno b ON b.roomno = r.roomno
+      LEFT JOIN (
+        SELECT bedno FROM iptadm d
+        JOIN ipt ON d.an = ipt.an
+        WHERE ipt.dchdate IS NULL
+      ) occ ON b.bedno = occ.bedno
+      LEFT JOIN bookings bk ON bk.room_number = b.bedno AND bk.status IN ('reserved','occupied')
+      WHERE r.ward = $1
+        AND r.roomtype = $2
+        AND b.bed_status_type_id = 1
+        AND r.name NOT LIKE '%รอรับ%'
+        AND occ.bedno IS NULL
+        AND bk.id IS NULL
+      GROUP BY r.roomno, r.name
+      ORDER BY r.name
+    `, [ward, roomtype], cfg);
+    res.json({ success: true, rooms: rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET available beds from HIS — roomtype required, ward/roomno optional (roomno scopes to one room)
+router.get('/his-beds', authCheck, async (req, res) => {
+  const cfg = loadSettings();
+  const { ward, roomtype, roomno } = req.query;
   if (!roomtype) return res.json({ success: true, beds: [] });
   try {
-    let sql, params;
-    if (ward) {
-      sql = `
-        SELECT b.bedno
-        FROM bedno b
-        JOIN roomno r ON b.roomno = r.roomno
-        LEFT JOIN (
-          SELECT bedno FROM iptadm d
-          JOIN ipt ON d.an = ipt.an
-          WHERE ipt.dchdate IS NULL
-        ) occ ON b.bedno = occ.bedno
-        LEFT JOIN bookings bk ON bk.room_number = b.bedno AND bk.status IN ('reserved','occupied')
-        WHERE r.ward = $1
-          AND r.roomtype = $2
-          AND b.bed_status_type_id = 1
-          AND r.name NOT LIKE '%รอรับ%'
-          AND occ.bedno IS NULL
-          AND bk.id IS NULL
-        ORDER BY b.bedno`;
-      params = [ward, roomtype];
-    } else {
-      sql = `
-        SELECT b.bedno
-        FROM bedno b
-        JOIN roomno r ON b.roomno = r.roomno
-        LEFT JOIN (
-          SELECT bedno FROM iptadm d
-          JOIN ipt ON d.an = ipt.an
-          WHERE ipt.dchdate IS NULL
-        ) occ ON b.bedno = occ.bedno
-        LEFT JOIN bookings bk ON bk.room_number = b.bedno AND bk.status IN ('reserved','occupied')
-        WHERE r.roomtype = $1
-          AND b.bed_status_type_id = 1
-          AND r.name NOT LIKE '%รอรับ%'
-          AND occ.bedno IS NULL
-          AND bk.id IS NULL
-        ORDER BY b.bedno`;
-      params = [roomtype];
-    }
+    const params = [];
+    const conditions = [];
+    if (roomno) { params.push(roomno); conditions.push(`r.roomno = $${params.length}`); }
+    if (ward)   { params.push(ward);   conditions.push(`r.ward = $${params.length}`); }
+    params.push(roomtype); conditions.push(`r.roomtype = $${params.length}`);
+    conditions.push(`b.bed_status_type_id = 1`);
+    conditions.push(`r.name NOT LIKE '%รอรับ%'`);
+    conditions.push(`occ.bedno IS NULL`);
+    conditions.push(`bk.id IS NULL`);
+
+    const sql = `
+      SELECT b.bedno, nd.price
+      FROM bedno b
+      JOIN roomno r ON b.roomno = r.roomno
+      LEFT JOIN nondrugitems nd ON nd.icode = b.room_charge_icode
+      LEFT JOIN (
+        SELECT bedno FROM iptadm d
+        JOIN ipt ON d.an = ipt.an
+        WHERE ipt.dchdate IS NULL
+      ) occ ON b.bedno = occ.bedno
+      LEFT JOIN bookings bk ON bk.room_number = b.bedno AND bk.status IN ('reserved','occupied')
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY b.bedno`;
     const rows = await query(sql, params, cfg);
     res.json({ success: true, beds: rows });
   } catch (err) {

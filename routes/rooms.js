@@ -161,7 +161,7 @@ const SQL_AVAILABLE_BEDS = `
 `;
 
 const SQL_ALL_BEDS = `
-  SELECT w.name as ward, rt.name as roomtype, rt.roomtype as roomtype_code, b.bedno, r.ward as ward_code
+  SELECT w.name as ward, rt.name as roomtype, rt.roomtype as roomtype_code, b.bedno, r.ward as ward_code, r.roomno
   FROM bedno b
   LEFT OUTER JOIN roomno r ON r.roomno = b.roomno
   LEFT OUTER JOIN ward w ON w.ward = r.ward
@@ -184,9 +184,12 @@ router.get('/hosbed', authCheck, async (req, res) => {
     const availSet = new Set(availBeds.map(r => r.bedno));
 
     const beds = allBeds.map(row => ({
-      ward:        row.ward,
-      roomtype:    row.roomtype,
-      bedno:       row.bedno,
+      ward:          row.ward,
+      roomtype:      row.roomtype,
+      roomtype_code: row.roomtype_code,
+      ward_code:     row.ward_code,
+      roomno:        row.roomno,
+      bedno:         row.bedno,
       room_status: availSet.has(row.bedno) ? 'available' : 'occupied'
     }));
 

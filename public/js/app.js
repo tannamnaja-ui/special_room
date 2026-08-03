@@ -323,11 +323,20 @@ async function cancelByRoom(room) {
 }
 
 function prefillRoom(room) {
+  // ทางลัดจากการคลิกห้องในแดชบอร์ด — ยังไม่ทราบหอผู้ป่วย/ห้อง HIS ที่ตรงกัน
+  // จึงเติมเตียงเข้า select ตรงๆ โดยไม่ผ่านลำดับ หอผู้ป่วย > ประเภทห้อง > ห้อง
   document.getElementById('bnRoomType').value = room.room_type_id || '';
-  filterRoomsByType();
-  setTimeout(() => {
-    document.getElementById('bnRoomId').value = room.id;
-  }, 100);
+  document.getElementById('bnRoomNo').innerHTML = '<option value="">-- เลือกห้อง --</option>';
+  const sel = document.getElementById('bnRoomId');
+  sel.innerHTML = '<option value="">-- เลือกเตียง --</option>';
+  const opt = document.createElement('option');
+  opt.value = room.room_number;
+  opt.dataset.roomId = room.id || '';
+  opt.dataset.price  = room.price_per_day || 0;
+  opt.textContent = `เตียง ${room.room_number}`;
+  sel.appendChild(opt);
+  sel.value = room.room_number;
+  showRoomPrice();
 }
 
 /* ===== ROOM TYPE SELECT ===== */
@@ -357,11 +366,13 @@ async function loadBookingWards() {
   } catch(e) {}
 }
 
-async function loadBookingRoomTypes() {
+async function loadBookingRoomTypes(ward) {
   const sel = document.getElementById('bnRoomType');
   if (!sel) return;
   try {
-    const res  = await fetch('/api/bookings/his-roomtypes');
+    const params = new URLSearchParams();
+    if (ward) params.set('ward', ward);
+    const res  = await fetch(`/api/bookings/his-roomtypes?${params}`);
     const data = await res.json();
     if (!data.success) return;
     const cur = sel.value;
@@ -391,18 +402,57 @@ async function loadBookingPriorityTypes() {
   } catch(e) {}
 }
 
-async function filterRoomsByWard() { await refreshBedList(); }
-async function filterRoomsByType() { await refreshBedList(); }
+async function onWardFilterChange() {
+  const ward = document.getElementById('bnWardFilter')?.value || '';
+  document.getElementById('bnRoomType').value = '';
+  document.getElementById('bnRoomNo').innerHTML = '<option value="">-- เลือกห้อง --</option>';
+  document.getElementById('bnRoomId').innerHTML = '<option value="">-- เลือกเตียง --</option>';
+  document.getElementById('roomPriceBox').style.display = 'none';
+  await loadBookingRoomTypes(ward);
+}
 
+async function filterRoomsByType() { await refreshRoomList(); }
+async function filterBedsByRoom()  { await refreshBedList(); }
+
+// ขั้นที่ 1: เลือกหอผู้ป่วย + ประเภทห้อง แล้ว → โหลดรายชื่อ "ห้อง" (roomno จาก HIS)
+async function refreshRoomList() {
+  const wardCode = document.getElementById('bnWardFilter')?.value || '';
+  const roomtype = document.getElementById('bnRoomType')?.value || '';
+  const sel = document.getElementById('bnRoomNo');
+  sel.innerHTML = '<option value="">-- เลือกห้อง --</option>';
+  document.getElementById('bnRoomId').innerHTML = '<option value="">-- เลือกเตียง --</option>';
+  document.getElementById('roomPriceBox').style.display = 'none';
+  if (!wardCode || !roomtype) return;
+  try {
+    const params = new URLSearchParams({ ward: wardCode, roomtype });
+    const res  = await fetch(`/api/bookings/his-rooms?${params}`);
+    const data = await res.json();
+    if (!data.success) return;
+    const rooms = data.rooms || [];
+    if (rooms.length === 0) {
+      sel.innerHTML += '<option value="" disabled>ไม่มีห้องว่างในเงื่อนไขนี้</option>';
+      return;
+    }
+    rooms.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.roomno;
+      opt.textContent = r.name || r.roomno;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+
+// ขั้นที่ 2: เลือกห้องแล้ว → โหลดรายชื่อ "เตียง" ในห้องนั้น
 async function refreshBedList() {
   const wardCode = document.getElementById('bnWardFilter')?.value || '';
   const roomtype = document.getElementById('bnRoomType')?.value || '';
+  const roomno   = document.getElementById('bnRoomNo')?.value || '';
   const sel = document.getElementById('bnRoomId');
-  sel.innerHTML = '<option value="">-- เลือกห้อง --</option>';
+  sel.innerHTML = '<option value="">-- เลือกเตียง --</option>';
   document.getElementById('roomPriceBox').style.display = 'none';
-  if (!roomtype) return;
+  if (!roomtype || !roomno) return;
   try {
-    const params = new URLSearchParams({ roomtype });
+    const params = new URLSearchParams({ roomtype, roomno });
     if (wardCode) params.set('ward', wardCode);
     const res  = await fetch(`/api/bookings/his-beds?${params}`);
     const data = await res.json();
@@ -413,13 +463,13 @@ async function refreshBedList() {
       return;
     }
     beds.forEach(b => {
-      const ir  = allRooms.find(r => String(r.room_number) === String(b.bedno));
-      const opt = document.createElement('option');
+      const ir    = allRooms.find(r => String(r.room_number) === String(b.bedno));
+      const price = Number(b.price) || 0;
+      const opt   = document.createElement('option');
       opt.value = b.bedno;
       opt.dataset.roomId = ir?.id || '';
-      opt.dataset.price  = ir?.price_per_day || 0;
-      opt.dataset.food   = ir?.food_price_per_day || 0;
-      opt.textContent = `เตียง ${b.bedno}${ir?.price_per_day ? ` (฿${Number(ir.price_per_day).toLocaleString()}/วัน)` : ''}`;
+      opt.dataset.price  = price;
+      opt.textContent = `เตียง ${b.bedno}${price ? ` (฿${price.toLocaleString()}/วัน)` : ''}`;
       sel.appendChild(opt);
     });
   } catch(e) {}
@@ -431,10 +481,7 @@ function showRoomPrice() {
   const box = document.getElementById('roomPriceBox');
   if (!opt || !opt.value) { box.style.display = 'none'; return; }
   const price = Number(opt.dataset.price) || 0;
-  const food  = Number(opt.dataset.food)  || 0;
-  document.getElementById('priceRoom').textContent  = '฿' + price.toLocaleString();
-  document.getElementById('priceFood').textContent  = '฿' + food.toLocaleString();
-  document.getElementById('priceTotal').textContent = '฿' + (price + food).toLocaleString();
+  document.getElementById('priceTotal').textContent = price.toLocaleString();
   box.style.display = 'block';
 }
 
@@ -765,7 +812,8 @@ function clearBookingForm() {
   if (co) co.value = '';
   const wf = document.getElementById('bnWardFilter'); if (wf) wf.value = '';
   document.getElementById('bnRoomType').value = '';
-  document.getElementById('bnRoomId').innerHTML = '<option value="">-- เลือกห้อง --</option>';
+  document.getElementById('bnRoomNo').innerHTML = '<option value="">-- เลือกห้อง --</option>';
+  document.getElementById('bnRoomId').innerHTML = '<option value="">-- เลือกเตียง --</option>';
   document.getElementById('patientInfoBox').classList.remove('show');
   document.getElementById('roomPriceBox').style.display = 'none';
   setDefaultDateTime();
@@ -1709,8 +1757,8 @@ async function prefillBedBooking(bed) {
     wf.value = bed.ward_code;
   }
 
-  // 2. โหลดประเภทห้องจาก HIS ตาม ward
-  await filterRoomsByWard();
+  // 2. โหลดประเภทห้องจาก HIS ตาม ward ที่เลือก
+  await loadBookingRoomTypes(bed.ward_code || '');
 
   // 3. ประเภทห้อง: ใช้ roomtype_code (rt.roomtype)
   const rtSel = document.getElementById('bnRoomType');
@@ -1718,10 +1766,19 @@ async function prefillBedBooking(bed) {
     rtSel.value = bed.roomtype_code;
   }
 
-  // 4. โหลดเตียงว่างจาก HIS
-  await filterRoomsByType();
+  // 4. โหลดรายชื่อห้อง (roomno) ของ ward + ประเภทห้องนี้
+  await refreshRoomList();
 
-  // 5. auto-select bedno
+  // 5. ห้อง: ใช้ roomno ถ้ามี
+  const roomNoSel = document.getElementById('bnRoomNo');
+  if (bed.roomno && [...roomNoSel.options].some(o => o.value === String(bed.roomno))) {
+    roomNoSel.value = String(bed.roomno);
+  }
+
+  // 6. โหลดเตียงว่างของห้องนั้น (หรือทั้งประเภทห้อง ถ้าไม่รู้ roomno)
+  await refreshBedList();
+
+  // 7. auto-select bedno
   const roomSel = document.getElementById('bnRoomId');
   if ([...roomSel.options].some(o => o.value === String(bed.bedno))) {
     roomSel.value = String(bed.bedno);
