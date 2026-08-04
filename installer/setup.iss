@@ -3,7 +3,7 @@
 ; plus a hidden-window C# launcher (no console window shown to the user).
 
 #define MyAppName "Special Room System"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppPublisher "Hospital Private Room System"
 #define MyAppExeName "Launcher.exe"
 
@@ -41,6 +41,10 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Filename: "{app}\{#MyAppExeName}"; Description: "เปิดใช้งาน {#MyAppName}"; Flags: nowait postinstall
 
 [Code]
+var
+  g_HasConfigBackup: Boolean;
+  g_ConfigBackupPath: String;
+
 // ลบ/ถอนการติดตั้งเวอร์ชันเดิมแบบเงียบก่อนติดตั้งเวอร์ชันใหม่ (ตรวจจากรีจิสทรีของ AppId เดียวกัน)
 function GetUninstallString(): String;
 var
@@ -67,6 +71,7 @@ var
   sUnInstallString: String;
   iResultCode: Integer;
   sOldInstallDir: String;
+  sOldConfigFile: String;
 begin
   Result := True;
   KillServerIfRunning();
@@ -79,9 +84,32 @@ begin
     Exec(sUnInstallString, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, iResultCode);
   end;
 
-  // ลบโฟลเดอร์ติดตั้งเดิมทั้งหมดให้เกลี้ยง (รวมไฟล์ที่โปรแกรมสร้างเพิ่มตอนใช้งาน เช่น config, logs
-  // ที่ uninstaller มาตรฐานจะไม่ลบให้ เพราะไม่ได้เป็นไฟล์ที่ตัว installer เดิมติดตั้งไว้)
   sOldInstallDir := ExpandConstant('{localappdata}\SpecialRoomSystem');
+  sOldConfigFile := sOldInstallDir + '\server\config\connection.json';
+
+  // สำรองค่าเชื่อมต่อ DB เดิมไว้ก่อนลบทั้งโฟลเดอร์ จะได้คืนกลับมาให้หลังติดตั้งเวอร์ชันใหม่เสร็จ
+  g_HasConfigBackup := False;
+  if FileExists(sOldConfigFile) then
+  begin
+    g_ConfigBackupPath := ExpandConstant('{tmp}\connection.json.bak');
+    g_HasConfigBackup := CopyFile(sOldConfigFile, g_ConfigBackupPath, False);
+  end;
+
+  // ลบโฟลเดอร์ติดตั้งเดิมทั้งหมดให้เกลี้ยง (รวมไฟล์ที่โปรแกรมสร้างเพิ่มตอนใช้งาน เช่น logs
+  // ที่ uninstaller มาตรฐานจะไม่ลบให้ เพราะไม่ได้เป็นไฟล์ที่ตัว installer เดิมติดตั้งไว้)
   if DirExists(sOldInstallDir) then
     DelTree(sOldInstallDir, True, True, True);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  sNewConfigDir: String;
+begin
+  if (CurStep = ssPostInstall) and g_HasConfigBackup then
+  begin
+    sNewConfigDir := ExpandConstant('{app}\server\config');
+    if not DirExists(sNewConfigDir) then
+      ForceDirectories(sNewConfigDir);
+    CopyFile(g_ConfigBackupPath, sNewConfigDir + '\connection.json', False);
+  end;
 end;
