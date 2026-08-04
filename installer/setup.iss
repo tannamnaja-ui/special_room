@@ -3,7 +3,7 @@
 ; plus a hidden-window C# launcher (no console window shown to the user).
 
 #define MyAppName "Special Room System"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Hospital Private Room System"
 #define MyAppExeName "Launcher.exe"
 
@@ -38,7 +38,7 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "เปิดใช้งาน {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "เปิดใช้งาน {#MyAppName}"; Flags: nowait postinstall
 
 [Code]
 // ลบ/ถอนการติดตั้งเวอร์ชันเดิมแบบเงียบก่อนติดตั้งเวอร์ชันใหม่ (ตรวจจากรีจิสทรีของ AppId เดียวกัน)
@@ -66,13 +66,22 @@ function InitializeSetup(): Boolean;
 var
   sUnInstallString: String;
   iResultCode: Integer;
+  sOldInstallDir: String;
 begin
   Result := True;
   KillServerIfRunning();
+
+  // รัน uninstaller ของเวอร์ชันเดิม (ถ้ามี) แบบเงียบก่อน
   sUnInstallString := GetUninstallString();
   if sUnInstallString <> '' then
   begin
     sUnInstallString := RemoveQuotes(sUnInstallString);
     Exec(sUnInstallString, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, iResultCode);
   end;
+
+  // ลบโฟลเดอร์ติดตั้งเดิมทั้งหมดให้เกลี้ยง (รวมไฟล์ที่โปรแกรมสร้างเพิ่มตอนใช้งาน เช่น config, logs
+  // ที่ uninstaller มาตรฐานจะไม่ลบให้ เพราะไม่ได้เป็นไฟล์ที่ตัว installer เดิมติดตั้งไว้)
+  sOldInstallDir := ExpandConstant('{localappdata}\SpecialRoomSystem');
+  if DirExists(sOldInstallDir) then
+    DelTree(sOldInstallDir, True, True, True);
 end;
