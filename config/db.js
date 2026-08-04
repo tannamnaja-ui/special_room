@@ -41,7 +41,9 @@ function getSharedPgPool(cfg) {
       database: cfg.database, user: cfg.username, password: cfg.password,
       max: 5,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000
+      connectionTimeoutMillis: 10000,
+      statement_timeout: 15000,
+      query_timeout: 15000
     });
     _pgPool.on('error', (err) => console.error('PG pool error:', err.message));
     _pgPoolKey = key;
@@ -55,7 +57,8 @@ function getSharedMysqlPool(cfg) {
     _mysqlPool = mysql.createPool({
       host: cfg.host, port: parseInt(cfg.port) || 3306,
       database: cfg.database, user: cfg.username, password: cfg.password,
-      waitForConnections: true, connectionLimit: 5, idleTimeout: 30000
+      waitForConnections: true, connectionLimit: 5, idleTimeout: 30000,
+      connectTimeout: 10000
     });
     _mysqlPoolKey = key;
   }
