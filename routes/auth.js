@@ -35,12 +35,17 @@ router.post('/save-connection', async (req, res) => {
   }
 });
 
-// Get saved connection (without password)
+// Get saved connection. ผู้ใช้ที่ login แล้วจะได้รหัสผ่านจริงกลับไปด้วย (ให้ browser
+// แสดงเป็น ●●● ในช่อง password ได้) ส่วนคนที่ยังไม่ login (หน้านี้เข้าได้ก่อน login
+// ตอน setup ครั้งแรก) จะไม่ได้รหัสผ่านจริงกลับไป เพื่อไม่ให้รั่วไหลโดยไม่ต้องยืนยันตัวตน
 router.get('/connection-settings', (req, res) => {
   const cfg = loadSettings();
   if (!cfg) return res.json({ configured: false });
-  const safe = { ...cfg, password: '', has_password: !!cfg.password };
-  res.json({ configured: true, settings: safe });
+  const isLoggedIn = !!(req.session && req.session.user);
+  const settings = isLoggedIn
+    ? { ...cfg, has_password: !!cfg.password }
+    : { ...cfg, password: '', has_password: !!cfg.password };
+  res.json({ configured: true, settings });
 });
 
 // Login

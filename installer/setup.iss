@@ -3,7 +3,7 @@
 ; plus a hidden-window C# launcher (no console window shown to the user).
 
 #define MyAppName "Special Room System"
-#define MyAppVersion "1.0.4"
+#define MyAppVersion "1.0.5"
 #define MyAppPublisher "Hospital Private Room System"
 #define MyAppExeName "Launcher.exe"
 

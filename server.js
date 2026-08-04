@@ -18,7 +18,6 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
   secret: 'hospital-room-secret-2024',
@@ -30,18 +29,20 @@ app.use(session({
 // Share io with routes
 app.use((req, res, next) => { req.io = io; next(); });
 
+// ต้องเช็ค login ก่อนเสมอ (ทั้ง '/' และ '/index.html') — ต้องอยู่ก่อน express.static
+// เพราะ static จะเสิร์ฟ index.html ให้ตรงๆทันทีถ้าเจอไฟล์ ไม่ผ่านการเช็ค session เลย
+app.get(['/', '/index.html'], (req, res) => {
+  if (!loadSettings()) return res.redirect('/settings.html');
+  if (!req.session.user) return res.redirect('/login.html');
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
 app.use('/api/auth', authRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/waitlist', waitlistRouter);
-
-// Serve login as default; redirect to settings if not configured yet
-app.get('/', (req, res) => {
-  if (!loadSettings()) {
-    return res.redirect('/settings.html');
-  }
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
 
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
