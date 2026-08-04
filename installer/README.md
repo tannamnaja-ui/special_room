@@ -11,8 +11,9 @@
 
 2. Compile launcher (โปรแกรมเปิดแบบไม่มีหน้าต่าง cmd + tray icon):
    ```
-   csc /target:winexe /out:installer\Launcher.exe /win32icon:installer\icon.ico /reference:System.Windows.Forms.dll,System.Drawing.dll installer\Launcher.cs
+   csc /target:winexe /out:installer\Launcher.exe /win32icon:installer\icon.ico /win32manifest:installer\Launcher.exe.manifest /reference:System.Windows.Forms.dll,System.Drawing.dll installer\Launcher.cs
    ```
+   ต้องใส่ `/win32manifest` เสมอ — ถ้าไม่ใส่ Windows บางเครื่องจะเข้าใจผิดว่า Launcher.exe เป็นตัว installer (heuristic ของ UAC เช็ค exe ที่ไม่มี manifest) แล้ว auto-run แบบ elevated ทำให้ installer เวอร์ชันถัดไป (ที่รันแบบ non-admin) ปิด/แทนที่ไฟล์นี้ไม่ได้
 
 3. (ถ้าต้องทำ icon ใหม่) compile + run ตัวสร้างไอคอน:
    ```

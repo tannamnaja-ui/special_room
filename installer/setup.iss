@@ -3,7 +3,7 @@
 ; plus a hidden-window C# launcher (no console window shown to the user).
 
 #define MyAppName "Special Room System"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.4"
 #define MyAppPublisher "Hospital Private Room System"
 #define MyAppExeName "Launcher.exe"
 
@@ -30,8 +30,8 @@ ArchitecturesInstallIn64BitMode=x64
 Name: "thai"; MessagesFile: "compiler:Languages\Thai.isl"
 
 [Files]
-Source: "Launcher.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\build\server\special_room-server.exe"; DestDir: "{app}\server"; Flags: ignoreversion
+Source: "Launcher.exe"; DestDir: "{app}"; Flags: ignoreversion restartreplace
+Source: "..\build\server\special_room-server.exe"; DestDir: "{app}\server"; Flags: ignoreversion restartreplace
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
