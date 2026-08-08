@@ -19,6 +19,8 @@ function loadSettings() {
 }
 
 function saveSettings(settings) {
+  const dir = path.dirname(SETTINGS_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
 }
 
