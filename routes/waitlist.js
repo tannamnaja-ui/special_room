@@ -47,19 +47,19 @@ router.post('/', authCheck, async (req, res) => {
       await query(
         `UPDATE waiting_list SET an=$1, patient_name=$2, ward=$3, doctor_name=$4, room_type_id=$5, preferred_room=$6,
          rights_type=$7, notes=$8, contact_name=$9, contact_phone=$10, priority_type=$11,
-         roomtype_code=$12, roomtype_name=$13, request_date=CURRENT_TIMESTAMP WHERE id=$14`,
+         roomtype_code=$12, roomtype_name=$13, check_in_date=$14, request_date=CURRENT_TIMESTAMP WHERE id=$15`,
         [an||null, patient_name, ward||ward_code||null, doctor_name||null,
          room_type_id, preferred_room, rights_type, notes,
          contact_name||null, contact_phone||null, priority_type||null,
-         roomtype_code||null, roomtype_name||null, existing[0].id],
+         roomtype_code||null, roomtype_name||null, check_in_date||null, existing[0].id],
         cfg
       );
     } else {
       await query(
-        `INSERT INTO waiting_list (hn, an, patient_name, ward, doctor_name, room_type_id, preferred_room, rights_type, notes, contact_name, contact_phone, priority_type, roomtype_code, roomtype_name, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'waiting',$15)`,
+        `INSERT INTO waiting_list (hn, an, patient_name, ward, doctor_name, room_type_id, preferred_room, rights_type, notes, check_in_date, contact_name, contact_phone, priority_type, roomtype_code, roomtype_name, status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'waiting',$16)`,
         [hn, an||null, patient_name, ward||ward_code||null, doctor_name||null,
-         room_type_id, preferred_room, rights_type, notes,
+         room_type_id, preferred_room, rights_type, notes, check_in_date||null,
          contact_name||null, contact_phone||null, priority_type||null,
          roomtype_code||null, roomtype_name||null, req.session.user.login_name],
         cfg

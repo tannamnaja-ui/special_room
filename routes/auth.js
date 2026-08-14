@@ -205,7 +205,8 @@ router.post('/create-waitlist-table', async (req, res) => {
     const extraCols = {
       an: 'VARCHAR(20)', ward: 'VARCHAR(100)', doctor_name: 'VARCHAR(200)',
       contact_name: 'VARCHAR(200)', contact_phone: 'VARCHAR(50)', priority_type: 'VARCHAR(200)',
-      roomtype_code: 'VARCHAR(50)', roomtype_name: 'VARCHAR(200)'
+      roomtype_code: 'VARCHAR(50)', roomtype_name: 'VARCHAR(200)',
+      check_in_date: 'VARCHAR(50)'
     };
     const added = [];
     for (const [col, def] of Object.entries(extraCols)) {
