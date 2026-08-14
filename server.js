@@ -5,7 +5,7 @@ const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
 
-const { loadSettings } = require('./config/db');
+const { loadSettings, query } = require('./config/db');
 const authRouter = require('./routes/auth');
 const roomsRouter = require('./routes/rooms');
 const bookingsRouter = require('./routes/bookings');
@@ -49,7 +49,22 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log('Client disconnected:', socket.id));
 });
 
+async function runMigrations() {
+  const cfg = loadSettings();
+  if (!cfg) return;
+  try {
+    if (cfg.db_type === 'postgresql') {
+      await query(`ALTER TABLE waiting_list ADD COLUMN IF NOT EXISTS check_in_date VARCHAR(50)`, [], cfg);
+    } else {
+      const cols = await query(`SHOW COLUMNS FROM waiting_list LIKE 'check_in_date'`, [], cfg);
+      if (!cols || cols.length === 0)
+        await query(`ALTER TABLE waiting_list ADD COLUMN check_in_date VARCHAR(50)`, [], cfg);
+    }
+  } catch {}
+}
+
 const PORT = process.env.PORT || 3003;
 server.listen(PORT, () => {
   console.log(`Hospital Room System running at http://localhost:${PORT}`);
+  runMigrations();
 });
