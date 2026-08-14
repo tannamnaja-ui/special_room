@@ -76,8 +76,8 @@ router.get('/patient/:hn', authCheck, async (req, res) => {
   try {
     let patient = null;
     const queries = [
-      `SELECT hn, concat(pname,fname,' ',lname) as patient_name FROM patient WHERE hn = $1 LIMIT 1`,
-      `SELECT hn, concat(fname,' ',lname) as patient_name FROM patient WHERE hn = $1 LIMIT 1`,
+      `SELECT hn, concat(pname,fname,' ',lname) as patient_name, mobile_phone_number FROM patient WHERE hn = $1 LIMIT 1`,
+      `SELECT hn, concat(fname,' ',lname) as patient_name, mobile_phone_number FROM patient WHERE hn = $1 LIMIT 1`,
     ];
     for (const sql of queries) {
       try {

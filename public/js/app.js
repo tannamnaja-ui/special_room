@@ -661,6 +661,7 @@ async function searchPatient() {
     if (pData.success) {
       document.getElementById('piHN').textContent    = pData.patient.hn;
       document.getElementById('piName').textContent  = pData.patient.patient_name || '-';
+      document.getElementById('piPhone').textContent = pData.patient.mobile_phone_number || '-';
       const rightsVal    = rData.success ? rData.rights.rights_type    : '';
       const rightsDisplay = rData.success ? (rData.rights.rights_display || rightsVal) : '';
       document.getElementById('piRights').textContent     = rightsDisplay || 'ไม่พบข้อมูลสิทธิ์';
