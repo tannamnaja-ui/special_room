@@ -591,4 +591,52 @@ router.patch('/:id/cancel', authCheck, async (req, res) => {
   }
 });
 
+// GET /api/bookings/allqueue — combined waiting+reserved with ipt ward name + roomtype_reserve est_adm_date
+router.get('/allqueue', authCheck, async (req, res) => {
+  const cfg = loadSettings();
+  const isPg = cfg.db_type === 'postgresql';
+  const rrDateExpr = isPg
+    ? `est_adm_date::text`
+    : `DATE_FORMAT(est_adm_date, '%Y-%m-%d')`;
+  try {
+    const [waitRows, bkRows] = await Promise.all([
+      query(`
+        SELECT w.id, w.hn, w.an, w.patient_name,
+               w.ward AS booked_ward, w.rights_type, w.request_date,
+               w.check_in_date, w.notes, w.priority_type,
+               COALESCE(w.roomtype_name, rt.type_name) AS type_name,
+               wd.name AS ipt_ward_name,
+               (SELECT ${rrDateExpr} FROM roomtype_reserve rr
+                WHERE rr.hn = w.hn AND (w.an IS NULL OR w.an = '' OR rr.an = w.an)
+                ORDER BY rr.roomtype_reserve_id DESC LIMIT 1) AS rr_est_adm_date
+        FROM waiting_list w
+        LEFT JOIN room_types rt ON rt.id = w.room_type_id
+        LEFT JOIN ipt i ON i.an = w.an AND i.dchdate IS NULL
+        LEFT JOIN ward wd ON wd.ward = i.ward
+        WHERE w.status = 'waiting'
+        ORDER BY w.request_date ASC
+      `, [], cfg),
+      query(`
+        SELECT b.id, b.hn, b.an, b.patient_name,
+               b.ward AS booked_ward, b.room_number, b.rights_type,
+               b.check_in_date, b.check_out_date, b.notes, b.priority_type,
+               rt.type_name,
+               wd.name AS ipt_ward_name,
+               (SELECT ${rrDateExpr} FROM roomtype_reserve rr
+                WHERE rr.hn = b.hn AND (b.an IS NULL OR b.an = '' OR rr.an = b.an)
+                ORDER BY rr.roomtype_reserve_id DESC LIMIT 1) AS rr_est_adm_date
+        FROM bookings b
+        LEFT JOIN room_types rt ON rt.id = b.room_type_id
+        LEFT JOIN ipt i ON i.an = b.an AND i.dchdate IS NULL
+        LEFT JOIN ward wd ON wd.ward = i.ward
+        WHERE b.status = 'reserved'
+        ORDER BY b.check_in_date ASC
+      `, [], cfg)
+    ]);
+    res.json({ success: true, waiting: waitRows, reserved: bkRows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;

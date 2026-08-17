@@ -397,24 +397,46 @@
       <!-- ===== TAB: WAITLIST ===== -->
       <div class="tab-panel" id="panel-waitlist">
         <div class="waitlist-table-wrap">
-          <div class="section-header">
-            <h3>⏳ คิวรอห้องพัก (จองคิวไว้ ยังไม่ได้ห้อง)</h3>
-            <div style="display:flex;align-items:center;gap:14px">
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
-                <input type="radio" name="waitlistFilter" id="waitlistShowWaiting" value="waiting" onchange="loadWaitlist()" checked
-                  style="width:16px;height:16px;cursor:pointer;accent-color:var(--primary)">
-                แสดงเฉพาะที่กำลังรอคิว
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
-                <input type="radio" name="waitlistFilter" id="waitlistShowReserved" value="reserved" onchange="loadWaitlist()"
-                  style="width:16px;height:16px;cursor:pointer;accent-color:#43A047">
-                แสดงเฉพาะคนที่ได้ห้องแล้ว
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
-                <input type="radio" name="waitlistFilter" id="waitlistShowAll" value="all" onchange="loadWaitlist()"
-                  style="width:16px;height:16px;cursor:pointer;accent-color:#78909C">
-                แสดงทั้งหมด
-              </label>
+          <div class="section-header" style="flex-direction:column;align-items:flex-start;gap:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:10px">
+              <h3 style="margin:0">⏳ คิวรอห้องพัก (จองคิวไว้ ยังไม่ได้ห้อง)</h3>
+              <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                  <input type="radio" name="waitlistFilter" id="waitlistShowWaiting" value="waiting" onchange="loadWaitlist()" checked
+                    style="width:16px;height:16px;cursor:pointer;accent-color:var(--primary)">
+                  แสดงเฉพาะที่กำลังรอคิว
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                  <input type="radio" name="waitlistFilter" id="waitlistShowReserved" value="reserved" onchange="loadWaitlist()"
+                    style="width:16px;height:16px;cursor:pointer;accent-color:#43A047">
+                  แสดงเฉพาะคนที่ได้ห้องแล้ว
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;cursor:pointer;color:#546E7A">
+                  <input type="radio" name="waitlistFilter" id="waitlistShowAll" value="all" onchange="loadWaitlist()"
+                    style="width:16px;height:16px;cursor:pointer;accent-color:#78909C">
+                  แสดงทั้งหมด
+                </label>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#F5F7FA;border-radius:8px;padding:10px 14px;width:100%;box-sizing:border-box">
+              <span style="font-size:13px;font-weight:600;color:#546E7A;white-space:nowrap">📅 กรองวันที่เข้าพัก:</span>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <label style="font-size:12px;color:#78909C;white-space:nowrap">ตั้งแต่วันที่</label>
+                  <input type="date" id="wlDateFrom" onchange="loadWaitlist()"
+                    style="font-size:13px;padding:5px 8px;border:1px solid #CFD8DC;border-radius:6px;color:#37474F;background:#fff;cursor:pointer">
+                </div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <label style="font-size:12px;color:#78909C;white-space:nowrap">ถึงวันที่</label>
+                  <input type="date" id="wlDateTo" onchange="loadWaitlist()"
+                    style="font-size:13px;padding:5px 8px;border:1px solid #CFD8DC;border-radius:6px;color:#37474F;background:#fff;cursor:pointer">
+                </div>
+                <button onclick="clearWlDateFilter()" title="ล้างตัวกรองวันที่"
+                  style="font-size:12px;padding:5px 12px;border:1px solid #CFD8DC;border-radius:6px;background:#fff;color:#546E7A;cursor:pointer;white-space:nowrap">
+                  ✕ ล้างวันที่
+                </button>
+              </div>
+              <span id="wlDateFilterInfo" style="font-size:12px;color:#F57C00;font-weight:500;display:none"></span>
             </div>
           </div>
           <div id="waitlistContent">
@@ -473,6 +495,10 @@
                 <option value="">— ทุก Ward —</option>
               </select>
               <button class="btn btn-secondary btn-sm" onclick="loadAllQueue()">🔄 รีเฟรช</button>
+              <button class="btn btn-sm" onclick="exportAllQueueExcel()"
+                style="background:#1B5E20;color:#fff;padding:6px 14px;font-size:13px">📊 Excel</button>
+              <button class="btn btn-sm" onclick="printAllQueue()"
+                style="background:#1565C0;color:#fff;padding:6px 14px;font-size:13px">🖨️ พิมพ์</button>
             </div>
           </div>
           <!-- status filter -->
@@ -487,6 +513,27 @@
             <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:500">
               <input type="radio" name="allQueueFilter" value="reserved" onchange="filterAllQueue()"> ✅ ได้ห้องแล้ว รอเข้าพัก
             </label>
+          </div>
+          <!-- date filter -->
+          <div style="padding:10px 20px;border-bottom:1px solid #F0F4F8;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#FAFBFC">
+            <span style="font-size:13px;font-weight:600;color:#546E7A;white-space:nowrap">📅 กรองวันที่เข้าพัก:</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:6px">
+                <label style="font-size:12px;color:#78909C;white-space:nowrap">ตั้งแต่วันที่</label>
+                <input type="date" id="aqDateFrom" onchange="filterAllQueue()"
+                  style="font-size:13px;padding:5px 8px;border:1px solid #CFD8DC;border-radius:6px;color:#37474F;background:#fff;cursor:pointer">
+              </div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <label style="font-size:12px;color:#78909C;white-space:nowrap">ถึงวันที่</label>
+                <input type="date" id="aqDateTo" onchange="filterAllQueue()"
+                  style="font-size:13px;padding:5px 8px;border:1px solid #CFD8DC;border-radius:6px;color:#37474F;background:#fff;cursor:pointer">
+              </div>
+              <button onclick="clearAqDateFilter()" title="ล้างตัวกรองวันที่"
+                style="font-size:12px;padding:5px 12px;border:1px solid #CFD8DC;border-radius:6px;background:#fff;color:#546E7A;cursor:pointer;white-space:nowrap">
+                ✕ ล้างวันที่
+              </button>
+            </div>
+            <span id="aqDateFilterInfo" style="font-size:12px;color:#F57C00;font-weight:500;display:none"></span>
           </div>
           <div id="allQueueTableWrap" style="padding:20px">
             <div class="empty-state">

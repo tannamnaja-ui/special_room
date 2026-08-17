@@ -919,8 +919,33 @@ async function loadWaitlist() {
     const data = await res.json();
     if (!data.success) return;
     const allList = data.list || [];
-    const list = filterVal === 'all' ? allList
-               : allList.filter(w => w.status === filterVal);
+    let list = filterVal === 'all' ? allList
+             : allList.filter(w => w.status === filterVal);
+
+    // กรองวันที่เข้าพัก
+    const dateFrom = document.getElementById('wlDateFrom')?.value || '';
+    const dateTo   = document.getElementById('wlDateTo')?.value || '';
+    if (dateFrom || dateTo) {
+      list = list.filter(item => {
+        if (!item.check_in_date) return false;
+        const d = item.check_in_date.slice(0, 10);
+        if (dateFrom && d < dateFrom) return false;
+        if (dateTo   && d > dateTo)   return false;
+        return true;
+      });
+      const info = document.getElementById('wlDateFilterInfo');
+      if (info) {
+        const fmtTH = v => v ? new Date(v + 'T00:00:00').toLocaleDateString('th-TH') : '';
+        const parts = [];
+        if (dateFrom) parts.push(`ตั้งแต่ ${fmtTH(dateFrom)}`);
+        if (dateTo)   parts.push(`ถึง ${fmtTH(dateTo)}`);
+        info.textContent = `กำลังกรอง: ${parts.join(' ')} — พบ ${list.length} รายการ`;
+        info.style.display = 'inline';
+      }
+    } else {
+      const info = document.getElementById('wlDateFilterInfo');
+      if (info) info.style.display = 'none';
+    }
 
     // Badge + dashboard: นับเฉพาะ waiting
     const waitingCount = allList.filter(w => w.status === 'waiting').length;
@@ -996,6 +1021,14 @@ async function loadWaitlist() {
   } catch (e) {
     console.error('loadWaitlist error', e);
   }
+}
+
+function clearWlDateFilter() {
+  const f = document.getElementById('wlDateFrom');
+  const t = document.getElementById('wlDateTo');
+  if (f) f.value = '';
+  if (t) t.value = '';
+  loadWaitlist();
 }
 
 async function cancelWait(id) {
@@ -1301,40 +1334,44 @@ async function seedDemo() {
 
 /* ===== ALL QUEUE (waiting + reserved combined) ===== */
 let allQueueList = [];
+let allQueueFilteredList = [];
 
 async function loadAllQueue() {
   const wrap = document.getElementById('allQueueTableWrap');
   if (!wrap) return;
   wrap.innerHTML = '<div style="text-align:center;color:#90A4AE;padding:40px 0;font-size:14px">กำลังโหลดข้อมูล...</div>';
   try {
-    const [wlRes, bkRes] = await Promise.all([
-      fetch('/api/waitlist?all=true'),
-      fetch('/api/bookings')
-    ]);
-    const wlData = await wlRes.json();
-    const bkData = await bkRes.json();
+    const res  = await fetch('/api/bookings/allqueue');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
 
-    const waitItems = (wlData.list || [])
-      .filter(w => w.status === 'waiting')
-      .map(w => ({
-        _type: 'waiting', id: w.id,
-        hn: w.hn, patient_name: w.patient_name,
-        ward: w.ward, room_number: '-',
-        type_name: w.roomtype_name || w.type_name || '-',
-        rights_type: w.rights_type, date: w.request_date,
-        status: 'waiting', priority_type: w.priority_type
-      }));
+    const waitItems = (data.waiting || []).map(w => ({
+      _type: 'waiting', id: w.id,
+      hn: w.hn, an: w.an, patient_name: w.patient_name,
+      ward: w.ipt_ward_name || w.booked_ward || '-',
+      room_number: '-',
+      type_name: w.type_name || '-',
+      rights_type: w.rights_type,
+      date: w.request_date,
+      check_in_date: w.check_in_date,
+      rr_est_adm_date: w.rr_est_adm_date,
+      notes: w.notes,
+      status: 'waiting', priority_type: w.priority_type
+    }));
 
-    const reservedItems = (bkData.bookings || [])
-      .filter(b => b.status === 'reserved')
-      .map(b => ({
-        _type: 'reserved', id: b.id,
-        hn: b.hn, patient_name: b.patient_name,
-        ward: b.ward || '-', room_number: b.room_number,
-        type_name: b.type_name || '-',
-        rights_type: b.rights_type, date: b.check_in_date || b.created_at,
-        status: 'reserved', priority_type: b.priority_type || '-'
-      }));
+    const reservedItems = (data.reserved || []).map(b => ({
+      _type: 'reserved', id: b.id,
+      hn: b.hn, an: b.an, patient_name: b.patient_name,
+      ward: b.ipt_ward_name || b.booked_ward || '-',
+      room_number: b.room_number,
+      type_name: b.type_name || '-',
+      rights_type: b.rights_type,
+      date: b.check_in_date || b.created_at,
+      check_in_date: b.check_in_date,
+      rr_est_adm_date: b.rr_est_adm_date,
+      notes: b.notes,
+      status: 'reserved', priority_type: b.priority_type || '-'
+    }));
 
     allQueueList = [...waitItems, ...reservedItems]
       .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
@@ -1357,15 +1394,52 @@ function populateAllQueueWardDropdown(list) {
 }
 
 function filterAllQueue() {
-  const ward     = document.getElementById('allQueueWardFilter')?.value || '';
+  const ward      = document.getElementById('allQueueWardFilter')?.value || '';
   const filterVal = document.querySelector('input[name="allQueueFilter"]:checked')?.value || 'all';
+  const dateFrom  = document.getElementById('aqDateFrom')?.value || '';
+  const dateTo    = document.getElementById('aqDateTo')?.value || '';
+
   let list = allQueueList;
-  if (ward)             list = list.filter(i => i.ward === ward);
+  if (ward)                list = list.filter(i => i.ward === ward);
   if (filterVal !== 'all') list = list.filter(i => i.status === filterVal);
+
+  if (dateFrom || dateTo) {
+    list = list.filter(item => {
+      // ใช้ check_in_date ก่อน ถ้าไม่มีใช้ rr_est_adm_date
+      const raw = item.check_in_date || item.rr_est_adm_date || '';
+      if (!raw) return false;
+      const d = raw.slice(0, 10);
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo   && d > dateTo)   return false;
+      return true;
+    });
+    const info = document.getElementById('aqDateFilterInfo');
+    if (info) {
+      const fmtTH = v => v ? new Date(v + 'T00:00:00').toLocaleDateString('th-TH') : '';
+      const parts = [];
+      if (dateFrom) parts.push(`ตั้งแต่ ${fmtTH(dateFrom)}`);
+      if (dateTo)   parts.push(`ถึง ${fmtTH(dateTo)}`);
+      info.textContent = `กำลังกรอง: ${parts.join(' ')} — พบ ${list.length} รายการ`;
+      info.style.display = 'inline';
+    }
+  } else {
+    const info = document.getElementById('aqDateFilterInfo');
+    if (info) info.style.display = 'none';
+  }
+
   renderAllQueue(list);
 }
 
+function clearAqDateFilter() {
+  const f = document.getElementById('aqDateFrom');
+  const t = document.getElementById('aqDateTo');
+  if (f) f.value = '';
+  if (t) t.value = '';
+  filterAllQueue();
+}
+
 function renderAllQueue(list) {
+  allQueueFilteredList = list;
   const wrap = document.getElementById('allQueueTableWrap');
   if (!wrap) return;
   if (list.length === 0) {
@@ -1376,46 +1450,256 @@ function renderAllQueue(list) {
     waiting:  '<span class="status-chip chip-waiting">⏳ ยังไม่ได้ห้อง</span>',
     reserved: '<span class="status-chip chip-reserved">✅ ได้ห้องแล้ว รอเข้าพัก</span>'
   };
+  const th = s => `<th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0;white-space:nowrap">${s}</th>`;
   wrap.innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:14px">
       <thead>
         <tr style="background:#F5F7FA;color:#546E7A;font-size:12px;font-weight:700">
-          <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0">#</th>
-          <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0">HN</th>
-          <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0">ชื่อ-สกุล</th>
-          <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0">Ward</th>
-          <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0">ห้อง</th>
-          <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0">ประเภทห้อง</th>
-          <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0">สิทธิการรักษา</th>
-          <th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0">วันที่จอง</th>
-          <th style="padding:10px 12px;text-align:center;border-bottom:1px solid #E0E0E0">สถานะ</th>
+          ${th('#')}${th('HN')}${th('ชื่อ-สกุล')}${th('Ward ปัจจุบัน')}${th('ห้อง')}
+          ${th('ประเภทห้อง')}${th('สิทธิการรักษา')}${th('วันที่เข้าพัก')}${th('หมายเหตุ')}
+          ${th('วันที่จอง')}<th style="padding:10px 12px;text-align:center;border-bottom:1px solid #E0E0E0">สถานะ</th>
           <th style="padding:10px 12px;text-align:center;border-bottom:1px solid #E0E0E0">จัดการ</th>
         </tr>
       </thead>
       <tbody>
-        ${list.map((item, i) => `
-        <tr style="background:${i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #F0F0F0">
-          <td style="padding:10px 12px;color:#90A4AE;font-size:12px">${i+1}</td>
-          <td style="padding:10px 12px;font-weight:600;color:var(--primary)">${escHtml(item.hn||'-')}</td>
-          <td style="padding:10px 12px">${escHtml(item.patient_name||'-')}</td>
-          <td style="padding:10px 12px">${escHtml(item.ward||'-')}</td>
-          <td style="padding:10px 12px;font-weight:${item.room_number!=='-'?'600':'400'}">${escHtml(item.room_number||'-')}</td>
-          <td style="padding:10px 12px">${escHtml(item.type_name||'-')}</td>
-          <td style="padding:10px 12px">${escHtml(item.rights_type||'-')}</td>
-          <td style="padding:10px 12px;font-size:12px;color:#546E7A">${item.date ? item.date.replace('T',' ').slice(0,16) : '-'}</td>
-          <td style="padding:10px 12px;text-align:center">${statusChip[item.status]||item.status}</td>
-          <td style="padding:10px 12px;text-align:center">
-            ${item.status === 'reserved'
-              ? `<button class="btn btn-sm" style="background:#1565C0;color:#fff;font-size:12px;padding:5px 10px"
-                   onclick="openCheckinConfirm(${item.id},'${escHtml(item.patient_name||'')}','${escHtml(item.room_number||'')}')">
-                   🔄 อัพเดทสถานะ</button>`
-              : `<button class="btn btn-sm btn-secondary" style="font-size:12px;padding:5px 10px"
-                   onclick="goToBookingFromWait(${item.id})">
-                   📝 จัดห้อง</button>`}
-          </td>
-        </tr>`).join('')}
+        ${list.map((item, i) => {
+          const fmtDate = v => v ? new Date(v).toLocaleDateString('th-TH') : '-';
+          return `
+          <tr style="background:${i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #F0F0F0">
+            <td style="padding:10px 12px;color:#90A4AE;font-size:12px">${i+1}</td>
+            <td style="padding:10px 12px;font-weight:600;color:var(--primary)">${escHtml(item.hn||'-')}</td>
+            <td style="padding:10px 12px">${escHtml(item.patient_name||'-')}</td>
+            <td style="padding:10px 12px">${escHtml(item.ward||'-')}</td>
+            <td style="padding:10px 12px;font-weight:${item.room_number!=='-'?'600':'400'}">${escHtml(item.room_number||'-')}</td>
+            <td style="padding:10px 12px">${escHtml(item.type_name||'-')}</td>
+            <td style="padding:10px 12px">${escHtml(item.rights_type||'-')}</td>
+            <td style="padding:10px 12px;font-size:12px;white-space:nowrap">${fmtDate(item.check_in_date || item.rr_est_adm_date)}</td>
+            <td style="padding:10px 12px;font-size:12px;max-width:160px;white-space:normal;color:#546E7A">${escHtml(item.notes||'-')}</td>
+            <td style="padding:10px 12px;font-size:12px;color:#546E7A;white-space:nowrap">${item.date ? item.date.replace('T',' ').slice(0,16) : '-'}</td>
+            <td style="padding:10px 12px;text-align:center">${statusChip[item.status]||item.status}</td>
+            <td style="padding:10px 12px;text-align:center">
+              ${item.status === 'reserved'
+                ? `<button class="btn btn-sm" style="background:#1565C0;color:#fff;font-size:12px;padding:5px 10px"
+                     onclick="openCheckinConfirm(${item.id},'${escHtml(item.patient_name||'')}','${escHtml(item.room_number||'')}')">
+                     🔄 อัพเดทสถานะ</button>`
+                : `<button class="btn btn-sm btn-secondary" style="font-size:12px;padding:5px 10px"
+                     onclick="goToBookingFromWait(${item.id})">
+                     📝 จัดห้อง</button>`}
+            </td>
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>`;
+}
+
+/* ===== PRINT ALL QUEUE ===== */
+function printAllQueue() {
+  const list = allQueueFilteredList;
+  if (!list || list.length === 0) { toast('ไม่มีข้อมูลสำหรับพิมพ์', 'warning'); return; }
+
+  // รวบรวม filter info สำหรับแสดงหัวรายงาน
+  const ward      = document.getElementById('allQueueWardFilter')?.value || '';
+  const filterVal = document.querySelector('input[name="allQueueFilter"]:checked')?.value || 'all';
+  const dateFrom  = document.getElementById('aqDateFrom')?.value || '';
+  const dateTo    = document.getElementById('aqDateTo')?.value || '';
+  const statusLabel = { all: 'ทั้งหมด', waiting: 'ยังไม่ได้ห้อง', reserved: 'ได้ห้องแล้ว รอเข้าพัก' };
+  const fmtTH = v => v ? new Date(v + 'T00:00:00').toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' }) : '';
+  const fmtDT = v => v ? new Date(v).toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' }) : '-';
+
+  const filterParts = [];
+  if (ward)     filterParts.push(`Ward: <b>${escHtml(ward)}</b>`);
+  filterParts.push(`สถานะ: <b>${statusLabel[filterVal] || filterVal}</b>`);
+  if (dateFrom) filterParts.push(`ตั้งแต่: <b>${fmtTH(dateFrom)}</b>`);
+  if (dateTo)   filterParts.push(`ถึง: <b>${fmtTH(dateTo)}</b>`);
+
+  const rows = list.map((item, i) => {
+    const checkInDate = fmtDT(item.check_in_date || item.rr_est_adm_date);
+    const statusTH = { waiting: 'รอคิว', reserved: 'ได้ห้องแล้ว รอเข้าพัก' };
+    return `<tr>
+      <td class="center">${i + 1}</td>
+      <td class="center">${escHtml(item.hn || '-')}</td>
+      <td>${escHtml(item.patient_name || '-')}</td>
+      <td>${escHtml(item.ward || '-')}</td>
+      <td class="center">${escHtml(item.room_number && item.room_number !== '-' ? item.room_number : '-')}</td>
+      <td>${escHtml(item.type_name || '-')}</td>
+      <td>${escHtml(item.rights_type || '-')}</td>
+      <td class="center">${checkInDate}</td>
+      <td>${escHtml(item.notes || '')}</td>
+      <td class="center">${statusTH[item.status] || item.status}</td>
+    </tr>`;
+  }).join('');
+
+  const printedAt = new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' });
+
+  const html = `<!DOCTYPE html><html lang="th"><head>
+  <meta charset="UTF-8">
+  <title>รายชื่อผู้จองและรอคิว</title>
+  <style>
+    @page { size: A4 landscape; margin: 15mm 12mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Angsana New', 'AngsanaUPC', serif; font-size: 16px; color: #222; margin: 0; }
+    .report-title { font-size: 22px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+    .report-sub   { font-size: 17px; text-align: center; color: #555; margin-bottom: 10px; }
+    .filter-bar   { font-size: 15px; color: #444; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 14px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+    .meta-right   { text-align: right; font-size: 14px; color: #777; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 16px; }
+    thead tr { background: #1565C0; color: #fff; }
+    th { padding: 6px 8px; text-align: left; font-weight: 600; white-space: nowrap; border: 1px solid #1565C0; }
+    td { padding: 5px 8px; border: 1px solid #ddd; vertical-align: top; }
+    tr:nth-child(even) td { background: #F3F6FF; }
+    td.center, th.center { text-align: center; }
+    .footer { margin-top: 14px; font-size: 14px; color: #888; text-align: right; }
+  </style>
+  </head><body>
+  <div class="report-title">รายชื่อผู้จองและรอคิวห้องพิเศษ</div>
+  <div class="report-sub">ชื่อผู้จองและรอคิวทั้งหมด (รอจัดการ)</div>
+  <div class="meta-right">พิมพ์เมื่อ: ${printedAt}</div>
+  <div class="filter-bar">${filterParts.join(' &nbsp;|&nbsp; ')} &nbsp;|&nbsp; จำนวน: <b>${list.length} รายการ</b></div>
+  <table>
+    <thead>
+      <tr>
+        <th class="center" style="width:30px">#</th>
+        <th class="center" style="width:65px">HN</th>
+        <th style="width:160px">ชื่อ-สกุล</th>
+        <th style="width:110px">Ward ปัจจุบัน</th>
+        <th class="center" style="width:55px">ห้อง</th>
+        <th style="width:110px">ประเภทห้อง</th>
+        <th style="width:100px">สิทธิการรักษา</th>
+        <th class="center" style="width:90px">วันที่เข้าพัก</th>
+        <th>หมายเหตุ</th>
+        <th class="center" style="width:110px">สถานะ</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div class="footer">จำนวนทั้งหมด ${list.length} รายการ</div>
+  </body></html>`;
+
+  const w = window.open('', '_blank', 'width=1100,height=750');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => { w.print(); }, 400);
+}
+
+/* ===== EXPORT ALL QUEUE EXCEL ===== */
+function exportAllQueueExcel() {
+  const list = allQueueFilteredList;
+  if (!list || list.length === 0) { toast('ไม่มีข้อมูลสำหรับส่งออก', 'warning'); return; }
+
+  const escXml = s => String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+  const cell = (v, type = 'String') =>
+    `<Cell><Data ss:Type="${type}">${escXml(v)}</Data></Cell>`;
+
+  const fmtDate = v => {
+    if (!v) return '';
+    const d = new Date(v);
+    if (isNaN(d)) return String(v).slice(0, 10);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  const statusTH = { waiting: 'รอคิว (ยังไม่ได้ห้อง)', reserved: 'ได้ห้องแล้ว รอเข้าพัก' };
+
+  // header row
+  const headers = ['#','HN','ชื่อ-สกุล','Ward ปัจจุบัน','ห้อง','ประเภทห้อง','สิทธิการรักษา','วันที่เข้าพัก','หมายเหตุ','สถานะ'];
+  const hRow = `<Row>${headers.map(h =>
+    `<Cell ss:StyleID="hdr"><Data ss:Type="String">${escXml(h)}</Data></Cell>`
+  ).join('')}</Row>`;
+
+  // data rows
+  const dataRows = list.map((item, i) => `<Row>
+    ${cell(i + 1, 'Number')}
+    ${cell(item.hn)}
+    ${cell(item.patient_name)}
+    ${cell(item.ward)}
+    ${cell(item.room_number && item.room_number !== '-' ? item.room_number : '')}
+    ${cell(item.type_name)}
+    ${cell(item.rights_type)}
+    ${cell(fmtDate(item.check_in_date || item.rr_est_adm_date))}
+    ${cell(item.notes)}
+    ${cell(statusTH[item.status] || item.status)}
+  </Row>`).join('');
+
+  // filter info rows (ใส่ด้านบนก่อน header)
+  const ward      = document.getElementById('allQueueWardFilter')?.value || '';
+  const filterVal = document.querySelector('input[name="allQueueFilter"]:checked')?.value || 'all';
+  const dateFrom  = document.getElementById('aqDateFrom')?.value || '';
+  const dateTo    = document.getElementById('aqDateTo')?.value || '';
+  const statusLabel = { all: 'ทั้งหมด', waiting: 'ยังไม่ได้ห้อง', reserved: 'ได้ห้องแล้ว รอเข้าพัก' };
+  const fmtTH = v => v ? fmtDate(v + 'T00:00:00') : '';
+  const now = new Date();
+  const printedAt = `${fmtDate(now)} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} น.`;
+
+  const infoRows = [
+    `<Row><Cell ss:StyleID="title" ss:MergeAcross="9"><Data ss:Type="String">รายชื่อผู้จองและรอคิวห้องพิเศษ</Data></Cell></Row>`,
+    `<Row><Cell ss:MergeAcross="9"><Data ss:Type="String">พิมพ์เมื่อ: ${escXml(printedAt)}</Data></Cell></Row>`,
+    `<Row><Cell ss:MergeAcross="9"><Data ss:Type="String">สถานะ: ${escXml(statusLabel[filterVal] || filterVal)}${ward ? '  |  Ward: ' + ward : ''}${dateFrom ? '  |  ตั้งแต่: ' + fmtTH(dateFrom) : ''}${dateTo ? '  ถึง: ' + fmtTH(dateTo) : ''}  |  จำนวน: ${list.length} รายการ</Data></Cell></Row>`,
+    `<Row></Row>`
+  ].join('');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:x="urn:schemas-microsoft-com:office:excel">
+  <Styles>
+    <Style ss:ID="title">
+      <Font ss:Bold="1" ss:Size="16" ss:FontName="Angsana New"/>
+    </Style>
+    <Style ss:ID="hdr">
+      <Font ss:Bold="1" ss:Color="#FFFFFF" ss:FontName="Angsana New" ss:Size="14"/>
+      <Interior ss:Color="#1565C0" ss:Pattern="Solid"/>
+      <Alignment ss:Horizontal="Center"/>
+    </Style>
+    <Style ss:ID="Default">
+      <Font ss:FontName="Angsana New" ss:Size="14"/>
+    </Style>
+  </Styles>
+  <Worksheet ss:Name="ผู้จองและรอคิว">
+    <Table ss:DefaultColumnWidth="80">
+      <Column ss:Width="30"/>
+      <Column ss:Width="70"/>
+      <Column ss:Width="160"/>
+      <Column ss:Width="110"/>
+      <Column ss:Width="55"/>
+      <Column ss:Width="120"/>
+      <Column ss:Width="110"/>
+      <Column ss:Width="90"/>
+      <Column ss:Width="160"/>
+      <Column ss:Width="130"/>
+      ${infoRows}
+      ${hRow}
+      ${dataRows}
+    </Table>
+    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+      <FreezePanes/>
+      <FrozenNoSplit/>
+      <SplitHorizontal>5</SplitHorizontal>
+      <TopRowBottomPane>5</TopRowBottomPane>
+    </WorksheetOptions>
+  </Worksheet>
+</Workbook>`;
+
+  const blob = new Blob(['﻿' + xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  a.href     = url;
+  a.download = `allqueue_${dateStr}.xls`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('ส่งออก Excel เรียบร้อย', 'success');
 }
 
 /* ===== SPEC ROOMS ALL (HIS beds) ===== */
