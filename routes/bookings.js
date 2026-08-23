@@ -92,6 +92,44 @@ router.get('/patient/:hn', authCheck, async (req, res) => {
   }
 });
 
+// Get active admission (confirm_discharge != 'Y') from HN
+router.get('/active-admission/:hn', authCheck, async (req, res) => {
+  const cfg = loadSettings();
+  const { hn } = req.params;
+  try {
+    const rows = await query(`
+      SELECT i.an, i.hn, i.ward,
+             wd.name AS ward_name,
+             d.name  AS doctor_name,
+             pt.pttype AS rights_code, pt.name AS rights_name
+      FROM ipt i
+      LEFT JOIN ward wd ON wd.ward = i.ward
+      LEFT JOIN ipt_doctor_list dl ON dl.an = i.an AND dl.active_doctor = 'Y'
+      LEFT JOIN doctor d ON d.code = dl.doctor
+      LEFT JOIN pttype pt ON pt.pttype = i.pttype
+      WHERE i.hn = $1
+        AND i.dchdate IS NULL
+        AND (i.confirm_discharge IS NULL OR i.confirm_discharge <> 'Y')
+      ORDER BY i.an DESC
+      LIMIT 1
+    `, [hn], cfg);
+    if (!rows || rows.length === 0) return res.json({ success: false });
+    const r = rows[0];
+    const rightsDisplay = r.rights_code || r.rights_name
+      ? [r.rights_code, r.rights_name].filter(Boolean).join(' ')
+      : null;
+    res.json({
+      success:     true,
+      an:          r.an,
+      ward_name:   r.ward_name   || null,
+      doctor_name: r.doctor_name || null,
+      rights_name: rightsDisplay || null
+    });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
 // Get ward + doctor from AN (single call)
 router.get('/info-by-an/:an', authCheck, async (req, res) => {
   const cfg = loadSettings();
@@ -425,7 +463,7 @@ router.post('/', authCheck, async (req, res) => {
     room_id, room_number, room_type_id,
     check_in_date, check_out_date,
     rights_type, deposit_amount, contact_name, contact_phone,
-    priority_type, notes,
+    priority_type, notes, no_pay_reason,
     ward_code, roomtype_code,
     waiting_list_id
   } = req.body;
@@ -443,14 +481,14 @@ router.post('/', authCheck, async (req, res) => {
       `INSERT INTO bookings
         (hn, an, patient_name, ward, doctor_name, room_id, room_number, room_type_id,
          check_in_date, check_out_date, rights_type, deposit_amount,
-         contact_name, contact_phone, priority_type, notes, status, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'reserved',$17)`,
+         contact_name, contact_phone, priority_type, notes, no_pay_reason, status, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'reserved',$18)`,
       [hn, an||null, patient_name, ward||null, doctor_name||null,
        room_id, room_number, room_type_id,
        check_in_date, check_out_date||null,
        rights_type||null, deposit_amount||0,
        contact_name||null, contact_phone||null,
-       priority_type||null, notes||null,
+       priority_type||null, notes||null, no_pay_reason||null,
        req.session.user.login_name],
       cfg
     );
@@ -604,13 +642,21 @@ router.get('/allqueue', authCheck, async (req, res) => {
         SELECT w.id, w.hn, w.an, w.patient_name,
                w.ward AS booked_ward, w.rights_type, w.request_date,
                w.check_in_date, w.notes, w.priority_type,
-               COALESCE(w.roomtype_name, rt.type_name) AS type_name,
+               COALESCE(w.roomtype_name, rt.type_name)   AS type_name,
+               rt.price_per_day, rt.food_price_per_day,
+               COALESCE(w.roomtype_name_2, rt2.type_name) AS type_name_2,
+               rt2.price_per_day AS price_per_day_2, rt2.food_price_per_day AS food_price_per_day_2,
+               COALESCE(w.roomtype_name_3, rt3.type_name) AS type_name_3,
+               rt3.price_per_day AS price_per_day_3, rt3.food_price_per_day AS food_price_per_day_3,
                wd.name AS ipt_ward_name,
+               (SELECT ia.bedno FROM iptadm ia WHERE ia.an = w.an LIMIT 1) AS ipt_bedno,
                (SELECT ${rrDateExpr} FROM roomtype_reserve rr
                 WHERE rr.hn = w.hn AND (w.an IS NULL OR w.an = '' OR rr.an = w.an)
                 ORDER BY rr.roomtype_reserve_id DESC LIMIT 1) AS rr_est_adm_date
         FROM waiting_list w
-        LEFT JOIN room_types rt ON rt.id = w.room_type_id
+        LEFT JOIN room_types rt  ON rt.id  = w.room_type_id
+        LEFT JOIN room_types rt2 ON rt2.id = w.room_type_id_2
+        LEFT JOIN room_types rt3 ON rt3.id = w.room_type_id_3
         LEFT JOIN ipt i ON i.an = w.an AND i.dchdate IS NULL
         LEFT JOIN ward wd ON wd.ward = i.ward
         WHERE w.status = 'waiting'
@@ -620,8 +666,9 @@ router.get('/allqueue', authCheck, async (req, res) => {
         SELECT b.id, b.hn, b.an, b.patient_name,
                b.ward AS booked_ward, b.room_number, b.rights_type,
                b.check_in_date, b.check_out_date, b.notes, b.priority_type,
-               rt.type_name,
+               rt.type_name, rt.price_per_day, rt.food_price_per_day,
                wd.name AS ipt_ward_name,
+               (SELECT ia.bedno FROM iptadm ia WHERE ia.an = b.an LIMIT 1) AS ipt_bedno,
                (SELECT ${rrDateExpr} FROM roomtype_reserve rr
                 WHERE rr.hn = b.hn AND (b.an IS NULL OR b.an = '' OR rr.an = b.an)
                 ORDER BY rr.roomtype_reserve_id DESC LIMIT 1) AS rr_est_adm_date

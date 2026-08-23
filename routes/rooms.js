@@ -76,10 +76,10 @@ async function ensureTables(cfg) {
 
   // Migrate existing tables: add new columns if missing
   const alterCols = {
-    bookings: ['booking_ref VARCHAR(20)', 'an VARCHAR(20)', 'ward VARCHAR(100)', 'doctor_name VARCHAR(200)', 'deposit_amount DECIMAL(10,2) DEFAULT 0', 'contact_name VARCHAR(200)', 'contact_phone VARCHAR(50)', 'priority_type VARCHAR(200)'],
+    bookings: ['booking_ref VARCHAR(20)', 'an VARCHAR(20)', 'ward VARCHAR(100)', 'doctor_name VARCHAR(200)', 'deposit_amount DECIMAL(10,2) DEFAULT 0', 'contact_name VARCHAR(200)', 'contact_phone VARCHAR(50)', 'priority_type VARCHAR(200)', 'no_pay_reason TEXT'],
     room_types: ['food_price_per_day DECIMAL(10,2) DEFAULT 0'],
     rooms: ['ward VARCHAR(100)'],
-    waiting_list: ['an VARCHAR(20)', 'ward VARCHAR(100)', 'doctor_name VARCHAR(200)', 'contact_name VARCHAR(200)', 'contact_phone VARCHAR(50)', 'priority_type VARCHAR(200)', 'roomtype_code VARCHAR(50)', 'roomtype_name VARCHAR(200)', 'check_in_date VARCHAR(50)']
+    waiting_list: ['an VARCHAR(20)', 'ward VARCHAR(100)', 'doctor_name VARCHAR(200)', 'contact_name VARCHAR(200)', 'contact_phone VARCHAR(50)', 'priority_type VARCHAR(200)', 'roomtype_code VARCHAR(50)', 'roomtype_name VARCHAR(200)', 'check_in_date VARCHAR(50)', 'room_type_id_2 INTEGER', 'roomtype_code_2 VARCHAR(50)', 'roomtype_name_2 VARCHAR(200)', 'room_type_id_3 INTEGER', 'roomtype_code_3 VARCHAR(50)', 'roomtype_name_3 VARCHAR(200)', 'no_pay_reason TEXT']
   };
   for (const [tbl, cols] of Object.entries(alterCols)) {
     for (const col of cols) {

@@ -650,26 +650,53 @@ async function searchPatient() {
 
   showLoading(true);
   try {
-    const [pRes, rRes] = await Promise.all([
+    const [pRes, rRes, admRes] = await Promise.all([
       fetch(`/api/bookings/patient/${hn}`),
-      fetch(`/api/bookings/rights/${hn}`)
+      fetch(`/api/bookings/rights/${hn}`),
+      fetch(`/api/bookings/active-admission/${hn}`)
     ]);
-    const pData = await pRes.json();
-    const rData = await rRes.json();
+    const pData   = await pRes.json();
+    const rData   = await rRes.json();
+    const admData = await admRes.json();
 
     const box = document.getElementById('patientInfoBox');
     if (pData.success) {
       document.getElementById('piHN').textContent    = pData.patient.hn;
       document.getElementById('piName').textContent  = pData.patient.patient_name || '-';
       document.getElementById('piPhone').textContent = pData.patient.mobile_phone_number || '-';
-      const rightsVal    = rData.success ? rData.rights.rights_type    : '';
-      const rightsDisplay = rData.success ? (rData.rights.rights_display || rightsVal) : '';
-      document.getElementById('piRights').textContent     = rightsDisplay || 'ไม่พบข้อมูลสิทธิ์';
-      document.getElementById('bnPatientName').value       = pData.patient.patient_name || '';
-      document.getElementById('bnRightsType').value        = rightsVal;
-      document.getElementById('bnRightsDisplay').value     = rightsDisplay;
+
+      if (admData.success) {
+        // พบ admit ที่ยังไม่ discharge — ใส่ AN, Ward, Doctor, สิทธิ์ จาก ipt
+        if (!document.getElementById('bnAn').value.trim())
+          document.getElementById('bnAn').value = admData.an || '';
+        if (admData.ward_name)
+          document.getElementById('bnWard').value = admData.ward_name;
+        if (admData.doctor_name)
+          document.getElementById('bnDoctor').value = admData.doctor_name;
+        if (admData.rights_name) {
+          document.getElementById('bnRightsType').value    = admData.rights_name;
+          document.getElementById('bnRightsDisplay').value = admData.rights_name;
+          document.getElementById('piRights').textContent  = admData.rights_name;
+        } else {
+          const rv = rData.success ? rData.rights.rights_type : '';
+          const rd = rData.success ? (rData.rights.rights_display || rv) : '';
+          document.getElementById('bnRightsType').value    = rv;
+          document.getElementById('bnRightsDisplay').value = rd;
+          document.getElementById('piRights').textContent  = rd || 'ไม่พบข้อมูลสิทธิ์';
+        }
+      } else {
+        // ไม่พบ admit — แสดงสิทธิ์จาก patient_pttype เหมือนเดิม
+        const rightsVal     = rData.success ? rData.rights.rights_type : '';
+        const rightsDisplay = rData.success ? (rData.rights.rights_display || rightsVal) : '';
+        document.getElementById('piRights').textContent     = rightsDisplay || 'ไม่พบข้อมูลสิทธิ์';
+        document.getElementById('bnRightsType').value        = rightsVal;
+        document.getElementById('bnRightsDisplay').value     = rightsDisplay;
+      }
+
+      document.getElementById('bnPatientName').value = pData.patient.patient_name || '';
       box.classList.add('show');
-      toast(`พบข้อมูลผู้ป่วย: ${pData.patient.patient_name}`, 'success');
+      const admNote = admData.success ? ` (AN: ${admData.an})` : '';
+      toast(`พบข้อมูลผู้ป่วย: ${pData.patient.patient_name}${admNote}`, 'success');
     } else {
       box.classList.remove('show');
       toast(pData.message, 'warning');
@@ -731,6 +758,7 @@ async function submitBooking() {
         rights_type: rightsType, deposit_amount: deposit || 0,
         contact_name: contactName, contact_phone: contactPhone,
         priority_type: priorityType || null, notes,
+        no_pay_reason: document.getElementById('bnNoPayReason')?.value || null,
         ward_code: document.getElementById('bnWardFilter').value,
         roomtype_code: roomtype,
         waiting_list_id: currentWaitlistId || null
@@ -780,6 +808,7 @@ async function addToWaitlist() {
       body: JSON.stringify({
         hn, patient_name: patientName, room_type_id: roomtype || null,
         rights_type: rightsType, notes,
+        no_pay_reason: document.getElementById('bnNoPayReason')?.value || null,
         an,
         ward: document.getElementById('bnWard').value.trim(),
         doctor_name: document.getElementById('bnDoctor').value.trim(),
@@ -803,7 +832,7 @@ async function addToWaitlist() {
 }
 
 function clearBookingForm() {
-  ['bnHn','bnAn','bnPatientName','bnRightsType','bnWard','bnDoctor','bnContactName','bnContactPhone','bnNotes','bnDeposit','bnRightsDisplay'].forEach(id => {
+  ['bnHn','bnAn','bnPatientName','bnRightsType','bnWard','bnDoctor','bnContactName','bnContactPhone','bnNotes','bnNoPayReason','bnDeposit','bnRightsDisplay'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -965,13 +994,14 @@ async function loadWaitlist() {
 
     waitlistItems = list;
     const statusChip = {
-      waiting:  '<span class="status-chip chip-waiting">รอคิว</span>',
-      reserved: '<span class="status-chip chip-reserved">จองแล้ว</span>',
-      assigned: '<span class="status-chip chip-occupied">ได้ห้องแล้ว</span>',
-      cancelled:'<span class="status-chip chip-cancelled">ยกเลิก</span>'
+      waiting:   '<span class="status-chip chip-waiting">รอคิว</span>',
+      reserved:  '<span class="status-chip chip-reserved">จองแล้ว</span>',
+      assigned:  '<span class="status-chip chip-occupied">ได้ห้องแล้ว</span>',
+      checkedin: '<span class="status-chip chip-occupied" style="background:#1B5E20;color:#fff">เข้าพักแล้ว</span>',
+      cancelled: '<span class="status-chip chip-cancelled">ยกเลิก</span>'
     };
     container.innerHTML = `
-      <table>
+      <table style="width:auto;white-space:nowrap">
         <thead>
           <tr>
             <th>คิว</th>
@@ -980,7 +1010,7 @@ async function loadWaitlist() {
             <th>ชื่อ-สกุล</th>
             <th>ประเภทผู้จอง</th>
             <th>ประเภทห้อง</th>
-            <th>สิทธิ์</th>
+            <th>สิทธิการรักษา</th>
             <th>วันที่เข้าพัก</th>
             <th>หมายเหตุ</th>
             <th>วันที่/เวลาลงข้อมูล</th>
@@ -998,17 +1028,26 @@ async function loadWaitlist() {
               ? `<span style="font-size:12px;color:#90A4AE">-</span>`
               : `<div style="display:flex;gap:6px">
                    <button class="btn btn-success btn-sm" onclick="goToBookingFromWait(${item.id})">🏨 จัดห้อง</button>
+                   <button class="btn btn-sm" style="background:#1B5E20;color:#fff;font-size:12px;padding:4px 8px"
+                     onclick="confirmWaitCheckin(${item.id},'${escAttr(item.patient_name||'')}')">✅ ยืนยันได้ห้องแล้ว</button>
                    <button class="btn btn-danger btn-sm" onclick="cancelWait(${item.id})">✕</button>
                  </div>`;
+            const anDisplay = item.an
+              ? `<span style="font-size:13px;color:#546E7A">${escHtml(item.an)}</span>`
+              : `<span style="font-size:12px;color:#F57C00;font-weight:600">รอ Admit</span>`;
             return `
               <tr style="${rowStyle}">
                 <td><div class="queue-number">${i+1}</div></td>
                 <td><span class="hn-text">${escHtml(item.hn||'-')}</span></td>
-                <td style="font-size:13px;color:#546E7A">${escHtml(item.an||'-')}</td>
+                <td>${anDisplay}</td>
                 <td>${escHtml(item.patient_name||'-')}</td>
                 <td style="font-size:13px">${escHtml(item.priority_type||'-')}</td>
-                <td>${escHtml(item.roomtype_name||item.type_name||'-')}</td>
-                <td>${escHtml(item.rights_type||'-')}</td>
+                <td>${fmtMultiRoomTypePrice([
+                  {name: item.roomtype_name||item.type_name, price: item.price_per_day,   food: item.food_price_per_day},
+                  {name: item.type_name_2,                   price: item.price_per_day_2, food: item.food_price_per_day_2},
+                  {name: item.type_name_3,                   price: item.price_per_day_3, food: item.food_price_per_day_3}
+                ])}</td>
+                <td style="white-space:normal;max-width:160px;font-size:13px">${escHtml(item.rights_type||'-')}</td>
                 <td style="font-size:13px">${item.check_in_date ? new Date(item.check_in_date).toLocaleDateString('th-TH') : '-'}</td>
                 <td style="font-size:13px;max-width:150px;white-space:normal">${escHtml(item.notes||'-')}</td>
                 <td style="font-size:13px">${escHtml(dateStr)}</td>
@@ -1036,6 +1075,18 @@ async function cancelWait(id) {
   await fetch(`/api/waitlist/${id}/cancel`, { method: 'PATCH' });
   toast('ยกเลิกคิวรอเรียบร้อย', 'success');
   refreshAllData();
+}
+
+async function confirmWaitCheckin(id, patientName) {
+  if (!confirm(`ยืนยันว่าผู้ป่วย "${patientName}" เข้าพักแล้ว?\n(สถานะจะเปลี่ยนเป็น เข้าพักแล้ว และอัพเดทสถานะใน HIS)`)) return;
+  try {
+    const res  = await fetch(`/api/waitlist/${id}/checkedin`, { method: 'PATCH' });
+    const data = await res.json();
+    toast(data.message || 'ยืนยันเข้าพักแล้ว', data.success ? 'success' : 'error');
+    if (data.success) refreshAllData();
+  } catch (e) {
+    toast('เกิดข้อผิดพลาด', 'error');
+  }
 }
 
 function goToBookingFromWait(id) {
@@ -1351,11 +1402,15 @@ async function loadAllQueue() {
       ward: w.ipt_ward_name || w.booked_ward || '-',
       room_number: '-',
       type_name: w.type_name || '-',
+      price_per_day: w.price_per_day, food_price_per_day: w.food_price_per_day,
+      type_name_2: w.type_name_2, price_per_day_2: w.price_per_day_2, food_price_per_day_2: w.food_price_per_day_2,
+      type_name_3: w.type_name_3, price_per_day_3: w.price_per_day_3, food_price_per_day_3: w.food_price_per_day_3,
       rights_type: w.rights_type,
       date: w.request_date,
       check_in_date: w.check_in_date,
       rr_est_adm_date: w.rr_est_adm_date,
       notes: w.notes,
+      ipt_bedno: w.ipt_bedno,
       status: 'waiting', priority_type: w.priority_type
     }));
 
@@ -1364,6 +1419,7 @@ async function loadAllQueue() {
       hn: b.hn, an: b.an, patient_name: b.patient_name,
       ward: b.ipt_ward_name || b.booked_ward || '-',
       room_number: b.room_number,
+      ipt_bedno: b.ipt_bedno,
       type_name: b.type_name || '-',
       rights_type: b.rights_type,
       date: b.check_in_date || b.created_at,
@@ -1452,7 +1508,7 @@ function renderAllQueue(list) {
   };
   const th = s => `<th style="padding:10px 12px;text-align:left;border-bottom:1px solid #E0E0E0;white-space:nowrap">${s}</th>`;
   wrap.innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <table style="width:auto;border-collapse:collapse;font-size:14px;white-space:nowrap">
       <thead>
         <tr style="background:#F5F7FA;color:#546E7A;font-size:12px;font-weight:700">
           ${th('#')}${th('HN')}${th('ชื่อ-สกุล')}${th('Ward ปัจจุบัน')}${th('ห้อง')}
@@ -1470,9 +1526,17 @@ function renderAllQueue(list) {
             <td style="padding:10px 12px;font-weight:600;color:var(--primary)">${escHtml(item.hn||'-')}</td>
             <td style="padding:10px 12px">${escHtml(item.patient_name||'-')}</td>
             <td style="padding:10px 12px">${escHtml(item.ward||'-')}</td>
-            <td style="padding:10px 12px;font-weight:${item.room_number!=='-'?'600':'400'}">${escHtml(item.room_number||'-')}</td>
-            <td style="padding:10px 12px">${escHtml(item.type_name||'-')}</td>
-            <td style="padding:10px 12px">${escHtml(item.rights_type||'-')}</td>
+            <td style="padding:10px 12px;white-space:normal">${(() => {
+              const rm = item.room_number && item.room_number !== '-' ? `<span style="font-weight:600">${escHtml(item.room_number)}</span>` : '';
+              const bd = item.ipt_bedno ? `<span style="font-size:11px;color:#546E7A;display:block">เตียง: ${escHtml(item.ipt_bedno)}</span>` : '';
+              return (rm || bd) ? (rm + bd) : '-';
+            })()}</td>
+            <td style="padding:10px 12px">${fmtMultiRoomTypePrice([
+              {name: item.type_name,   price: item.price_per_day,   food: item.food_price_per_day},
+              {name: item.type_name_2, price: item.price_per_day_2, food: item.food_price_per_day_2},
+              {name: item.type_name_3, price: item.price_per_day_3, food: item.food_price_per_day_3}
+            ])}</td>
+            <td style="padding:10px 12px;white-space:normal;max-width:160px">${escHtml(item.rights_type||'-')}</td>
             <td style="padding:10px 12px;font-size:12px;white-space:nowrap">${fmtDate(item.check_in_date || item.rr_est_adm_date)}</td>
             <td style="padding:10px 12px;font-size:12px;max-width:160px;white-space:normal;color:#546E7A">${escHtml(item.notes||'-')}</td>
             <td style="padding:10px 12px;font-size:12px;color:#546E7A;white-space:nowrap">${item.date ? item.date.replace('T',' ').slice(0,16) : '-'}</td>
@@ -2346,6 +2410,27 @@ function renderHisRoomtypes(rows) {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtRoomTypePrice(typeName, pricePerDay, foodPrice) {
+  const p   = parseFloat(pricePerDay) || 0;
+  const f   = parseFloat(foodPrice)   || 0;
+  const tot = p + f;
+  const fmt = v => v.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const name = escHtml(typeName || '-');
+  if (!p && !f) return name;
+  return `${name}<br>
+    <span style="font-size:11px;color:#546E7A">1. ค่าห้อง ${fmt(p)} ฿/วัน</span><br>
+    <span style="font-size:11px;color:#546E7A">2. ค่าอาหาร ${fmt(f)} ฿/วัน</span><br>
+    <span style="font-size:11px;color:#1565C0;font-weight:600">3. รวม ${fmt(tot)} ฿/วัน</span>`;
+}
+function fmtMultiRoomTypePrice(entries) {
+  // entries = [{name, price, food}, ...]  สูงสุด 3 ลำดับ — แสดงเฉพาะชื่อ
+  const valid = entries.filter(e => e && e.name && e.name !== '-' && e.name !== 'null' && e.name !== 'undefined');
+  if (!valid.length) return '-';
+  if (valid.length === 1) return escHtml(valid[0].name);
+  return valid.map((e, idx) =>
+    `<div style="margin-bottom:2px"><span style="font-size:11px;color:#90A4AE;font-weight:600">ลำดับ${idx+1}.</span> ${escHtml(e.name)}</div>`
+  ).join('');
 }
 function escAttr(s) {
   return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;');

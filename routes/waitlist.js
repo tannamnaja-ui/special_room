@@ -17,9 +17,17 @@ router.get('/', authCheck, async (req, res) => {
     if (statusFilter) whereClause = `WHERE w.status = '${statusFilter.replace(/'/g,"''")}'`;
     else if (!showAll) whereClause = "WHERE w.status = 'waiting'";
     const rows = await query(`
-      SELECT w.*, rt.type_name
+      SELECT w.*,
+        COALESCE(w.roomtype_name, rt.type_name)  AS type_name,
+        rt.price_per_day, rt.food_price_per_day,
+        COALESCE(w.roomtype_name_2, rt2.type_name) AS type_name_2,
+        rt2.price_per_day AS price_per_day_2, rt2.food_price_per_day AS food_price_per_day_2,
+        COALESCE(w.roomtype_name_3, rt3.type_name) AS type_name_3,
+        rt3.price_per_day AS price_per_day_3, rt3.food_price_per_day AS food_price_per_day_3
       FROM waiting_list w
-      LEFT JOIN room_types rt ON w.room_type_id = rt.id
+      LEFT JOIN room_types rt  ON rt.id  = w.room_type_id
+      LEFT JOIN room_types rt2 ON rt2.id = w.room_type_id_2
+      LEFT JOIN room_types rt3 ON rt3.id = w.room_type_id_3
       ${whereClause}
       ORDER BY w.request_date ASC
     `, [], cfg);
@@ -33,7 +41,7 @@ router.get('/', authCheck, async (req, res) => {
 router.post('/', authCheck, async (req, res) => {
   const cfg = loadSettings();
   const {
-    hn, patient_name, room_type_id, preferred_room, rights_type, notes,
+    hn, patient_name, room_type_id, preferred_room, rights_type, notes, no_pay_reason,
     an, ward, ward_code, doctor_name, roomtype_code, roomtype_name, bedno,
     check_in_date, check_out_date, deposit_amount, contact_name, contact_phone, priority_type
   } = req.body;
@@ -47,19 +55,21 @@ router.post('/', authCheck, async (req, res) => {
       await query(
         `UPDATE waiting_list SET an=$1, patient_name=$2, ward=$3, doctor_name=$4, room_type_id=$5, preferred_room=$6,
          rights_type=$7, notes=$8, contact_name=$9, contact_phone=$10, priority_type=$11,
-         roomtype_code=$12, roomtype_name=$13, check_in_date=$14, request_date=CURRENT_TIMESTAMP WHERE id=$15`,
+         roomtype_code=$12, roomtype_name=$13, check_in_date=$14, no_pay_reason=$15,
+         request_date=CURRENT_TIMESTAMP WHERE id=$16`,
         [an||null, patient_name, ward||ward_code||null, doctor_name||null,
          room_type_id, preferred_room, rights_type, notes,
          contact_name||null, contact_phone||null, priority_type||null,
-         roomtype_code||null, roomtype_name||null, check_in_date||null, existing[0].id],
+         roomtype_code||null, roomtype_name||null, check_in_date||null,
+         no_pay_reason||null, existing[0].id],
         cfg
       );
     } else {
       await query(
-        `INSERT INTO waiting_list (hn, an, patient_name, ward, doctor_name, room_type_id, preferred_room, rights_type, notes, check_in_date, contact_name, contact_phone, priority_type, roomtype_code, roomtype_name, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'waiting',$16)`,
+        `INSERT INTO waiting_list (hn, an, patient_name, ward, doctor_name, room_type_id, preferred_room, rights_type, notes, no_pay_reason, check_in_date, contact_name, contact_phone, priority_type, roomtype_code, roomtype_name, status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'waiting',$17)`,
         [hn, an||null, patient_name, ward||ward_code||null, doctor_name||null,
-         room_type_id, preferred_room, rights_type, notes, check_in_date||null,
+         room_type_id, preferred_room, rights_type, notes, no_pay_reason||null, check_in_date||null,
          contact_name||null, contact_phone||null, priority_type||null,
          roomtype_code||null, roomtype_name||null, req.session.user.login_name],
         cfg
@@ -131,6 +141,46 @@ router.patch('/:id/confirm', authCheck, async (req, res) => {
     req.io.emit('room_updated');
     req.io.emit('waitlist_updated');
     res.json({ success: true, message: 'จัดห้องให้ผู้ป่วยเรียบร้อย' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PATCH ยืนยันเข้าพักแล้ว (checkedin) — เปลี่ยน status + อัพ roomtype_reserve status = 2
+router.patch('/:id/checkedin', authCheck, async (req, res) => {
+  const cfg = loadSettings();
+  try {
+    const rows = await query('SELECT * FROM waiting_list WHERE id = $1', [req.params.id], cfg);
+    if (!rows || rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
+    const item = rows[0];
+
+    await query(`UPDATE waiting_list SET status = 'checkedin' WHERE id = $1`, [req.params.id], cfg);
+
+    // อัพ roomtype_reserve → room_reserve_status_id = 2
+    try {
+      const isPg = cfg.db_type === 'postgresql';
+      if (isPg) {
+        await query(
+          `UPDATE roomtype_reserve SET room_reserve_status_id = 2
+           WHERE roomtype_reserve_id = (
+             SELECT roomtype_reserve_id FROM roomtype_reserve
+             WHERE hn = $1 AND ($2::text = '' OR an = $2)
+             ORDER BY roomtype_reserve_id DESC LIMIT 1
+           )`,
+          [item.hn, item.an || ''], cfg
+        );
+      } else {
+        await query(
+          `UPDATE roomtype_reserve SET room_reserve_status_id = 2
+           WHERE hn = ? AND (? = '' OR an = ?)
+           ORDER BY roomtype_reserve_id DESC LIMIT 1`,
+          [item.hn, item.an || '', item.an || ''], cfg
+        );
+      }
+    } catch {}
+
+    req.io.emit('waitlist_updated');
+    res.json({ success: true, message: 'ยืนยันเข้าพักแล้ว' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

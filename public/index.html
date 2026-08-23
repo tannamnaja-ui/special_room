@@ -355,6 +355,12 @@
               placeholder="เช่น แพ้อาหาร, ต้องการเตียงเสริมญาติ, คำสั่งแพทย์แยกห้อง"></textarea>
           </div>
 
+          <div class="form-group">
+            <label>สาเหตุการไม่จ่ายห้อง</label>
+            <textarea id="bnNoPayReason" class="form-control" rows="2"
+              placeholder="ระบุสาเหตุที่ผู้ป่วยไม่จ่ายค่าห้อง (ถ้ามี)"></textarea>
+          </div>
+
           <div style="display:flex;gap:12px;margin-top:12px">
             <button class="btn btn-primary" style="flex:1" onclick="submitBooking()">✅ บันทึกการจอง (ได้ห้องแล้วรอเข้าพัก)</button>
             <button class="btn btn-warning" onclick="addToWaitlist()">⏳ เพิ่มเข้าคิวรอห้องพัก (ยังไม่ได้ห้อง)</button>
@@ -439,7 +445,7 @@
               <span id="wlDateFilterInfo" style="font-size:12px;color:#F57C00;font-weight:500;display:none"></span>
             </div>
           </div>
-          <div id="waitlistContent">
+          <div id="waitlistContent" style="overflow-x:auto">
             <div class="empty-state">
               <div class="empty-icon">📋</div>
               <p>ไม่มีรายการในคิวรอ</p>
@@ -535,7 +541,7 @@
             </div>
             <span id="aqDateFilterInfo" style="font-size:12px;color:#F57C00;font-weight:500;display:none"></span>
           </div>
-          <div id="allQueueTableWrap" style="padding:20px">
+          <div id="allQueueTableWrap" style="padding:20px;overflow-x:auto">
             <div class="empty-state">
               <div class="empty-icon">🏨</div>
               <p>กำลังโหลดข้อมูล...</p>
