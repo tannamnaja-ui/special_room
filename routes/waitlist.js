@@ -7,15 +7,41 @@ function authCheck(req, res, next) {
   next();
 }
 
+// DEBUG: ทดสอบ query ห้องปัจจุบัน สำหรับ HN ที่ระบุ
+router.get('/debug-room/:hn', authCheck, async (req, res) => {
+  const cfg = loadSettings();
+  try {
+    const rows = await query(`
+      SELECT hi.an, hi.hn, hi.dchdate, hi.confirm_discharge,
+             ia.bedno, ia.roomno,
+             rn.name as roomno_name,
+             concat(rn.name, ' เตียง ', ia.bedno) as room_display
+      FROM ipt hi
+      LEFT JOIN iptadm ia ON ia.an = hi.an
+      LEFT JOIN roomno rn ON rn.roomno = ia.roomno
+      WHERE hi.hn = $1
+      ORDER BY hi.an DESC LIMIT 5
+    `, [req.params.hn], cfg);
+    res.json({ success: true, hn: req.params.hn, rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET waiting list
 router.get('/', authCheck, async (req, res) => {
   const cfg = loadSettings();
   try {
     const showAll = req.query.all === 'true';
     const statusFilter = req.query.status;
-    let whereClause = '';
-    if (statusFilter) whereClause = `WHERE w.status = '${statusFilter.replace(/'/g,"''")}'`;
-    else if (!showAll) whereClause = "WHERE w.status = 'waiting'";
+    const conditions = [];
+    if (statusFilter) conditions.push(`w.status = '${statusFilter.replace(/'/g,"''")}'`);
+    else if (!showAll) conditions.push(`w.status = 'waiting'`);
+    // ตัดรายการที่ AN มี confirm_discharge = 'Y' แล้วออก
+    conditions.push(`(w.an IS NULL OR w.an = '' OR NOT EXISTS (
+      SELECT 1 FROM ipt WHERE ipt.an = w.an AND ipt.confirm_discharge = 'Y'
+    ))`);
+    const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const rows = await query(`
       SELECT w.*,
         COALESCE(w.roomtype_name, rt.type_name)  AS type_name,
@@ -23,11 +49,21 @@ router.get('/', authCheck, async (req, res) => {
         COALESCE(w.roomtype_name_2, rt2.type_name) AS type_name_2,
         rt2.price_per_day AS price_per_day_2, rt2.food_price_per_day AS food_price_per_day_2,
         COALESCE(w.roomtype_name_3, rt3.type_name) AS type_name_3,
-        rt3.price_per_day AS price_per_day_3, rt3.food_price_per_day AS food_price_per_day_3
+        rt3.price_per_day AS price_per_day_3, rt3.food_price_per_day AS food_price_per_day_3,
+        cur_room.room_name AS current_room_name,
+        cur_room.bed_no   AS current_bed_no
       FROM waiting_list w
       LEFT JOIN room_types rt  ON rt.id  = w.room_type_id
       LEFT JOIN room_types rt2 ON rt2.id = w.room_type_id_2
       LEFT JOIN room_types rt3 ON rt3.id = w.room_type_id_3
+      LEFT JOIN LATERAL (
+        SELECT r.name AS room_name, a.bedno AS bed_no
+        FROM ipt i
+        LEFT JOIN iptadm a ON a.an = i.an
+        LEFT JOIN roomno r ON r.roomno = a.roomno
+        WHERE i.hn = w.hn AND r.name IS NOT NULL
+        ORDER BY i.an DESC LIMIT 1
+      ) cur_room ON TRUE
       ${whereClause}
       ORDER BY w.request_date ASC
     `, [], cfg);

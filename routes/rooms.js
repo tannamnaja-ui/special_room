@@ -161,14 +161,15 @@ const SQL_AVAILABLE_BEDS = `
 `;
 
 const SQL_ALL_BEDS = `
-  SELECT w.name as ward, rt.name as roomtype, rt.roomtype as roomtype_code, b.bedno, r.ward as ward_code, r.roomno
+  SELECT w.name as ward, rt.name as roomtype, rt.roomtype as roomtype_code,
+         b.bedno, b.bed_status_type_id, r.ward as ward_code, r.roomno
   FROM bedno b
   LEFT OUTER JOIN roomno r ON r.roomno = b.roomno
   LEFT OUTER JOIN ward w ON w.ward = r.ward
   LEFT OUTER JOIN roomtype rt ON rt.roomtype = r.roomtype
   WHERE rt.hos_guid = 'Y'
     AND w.ward_active = 'Y'
-    AND b.bed_status_type_id = 1
+    AND b.bed_status_type_id IN (1, 4)
   ORDER BY w.name, rt.name, b.bedno
 `;
 
@@ -184,13 +185,16 @@ router.get('/hosbed', authCheck, async (req, res) => {
     const availSet = new Set(availBeds.map(r => r.bedno));
 
     const beds = allBeds.map(row => ({
-      ward:          row.ward,
-      roomtype:      row.roomtype,
-      roomtype_code: row.roomtype_code,
-      ward_code:     row.ward_code,
-      roomno:        row.roomno,
-      bedno:         row.bedno,
-      room_status: availSet.has(row.bedno) ? 'available' : 'occupied'
+      ward:               row.ward,
+      roomtype:           row.roomtype,
+      roomtype_code:      row.roomtype_code,
+      ward_code:          row.ward_code,
+      roomno:             row.roomno,
+      bedno:              row.bedno,
+      bed_status_type_id: row.bed_status_type_id,
+      room_status: String(row.bed_status_type_id) === '4'
+        ? 'maintenance'
+        : availSet.has(row.bedno) ? 'available' : 'occupied'
     }));
 
     res.json({ success: true, beds });

@@ -134,7 +134,28 @@ async function loadRoomTypes() {
     if (!data.success) return;
     allRoomTypes = data.types || [];
     populateRoomTypeSelect();
+    populateWaitPrefSelects();
   } catch {}
+}
+
+function populateWaitPrefSelects(preselect) {
+  const baseOpts = '<option value="">-- ไม่ระบุ --</option>' +
+    allRoomTypes.map(t => `<option value="${t.id}">${escHtml(t.type_name + ' ' + (+t.price_per_day) + ' บาท')}</option>`).join('');
+  ['wnPref1','wnPref2','wnPref3'].forEach((elId, i) => {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.innerHTML = baseOpts;
+    if (!preselect) return;
+    const rtId   = preselect[i] ? preselect[i].id   : null;
+    const rtName = preselect[i] ? preselect[i].name  : null;
+    if (rtId) {
+      el.value = rtId;
+    } else if (rtName) {
+      // fallback: หา id จากชื่อที่ตรงกัน
+      const match = allRoomTypes.find(t => t.type_name === rtName);
+      if (match) el.value = match.id;
+    }
+  });
 }
 
 function updateStats(stats) {
@@ -846,6 +867,8 @@ function clearBookingForm() {
   document.getElementById('bnRoomId').innerHTML = '<option value="">-- เลือกเตียง --</option>';
   document.getElementById('patientInfoBox').classList.remove('show');
   document.getElementById('roomPriceBox').style.display = 'none';
+  const pb = document.getElementById('waitPrefBox'); if (pb) pb.style.display = 'none';
+  populateWaitPrefSelects([{},{},{}]);
   setDefaultDateTime();
   currentWaitlistId = null;
 }
@@ -976,6 +999,12 @@ async function loadWaitlist() {
       if (info) info.style.display = 'none';
     }
 
+    // กรอง HN
+    const hnSearch = (document.getElementById('wlHnSearch')?.value || '').trim();
+    if (hnSearch) {
+      list = list.filter(item => (item.hn || '').includes(hnSearch));
+    }
+
     // Badge + dashboard: นับเฉพาะ waiting
     const waitingCount = allList.filter(w => w.status === 'waiting').length;
     const badge = document.getElementById('waitBadge');
@@ -1007,6 +1036,7 @@ async function loadWaitlist() {
             <th>คิว</th>
             <th>HN</th>
             <th>AN</th>
+            <th>ห้องปัจจุบัน</th>
             <th>ชื่อ-สกุล</th>
             <th>ประเภทผู้จอง</th>
             <th>ประเภทห้อง</th>
@@ -1040,6 +1070,9 @@ async function loadWaitlist() {
                 <td><div class="queue-number">${i+1}</div></td>
                 <td><span class="hn-text">${escHtml(item.hn||'-')}</span></td>
                 <td>${anDisplay}</td>
+                <td style="font-size:12px;min-width:120px">${item.current_room_name
+                  ? `<div style="color:#1565C0;font-weight:600">${escHtml(item.current_room_name)}</div><div style="font-size:11px;color:#546E7A">เตียง ${escHtml(item.current_bed_no||'-')}</div>`
+                  : '<span style="color:#BDBDBD">-</span>'}</td>
                 <td>${escHtml(item.patient_name||'-')}</td>
                 <td style="font-size:13px">${escHtml(item.priority_type||'-')}</td>
                 <td>${fmtMultiRoomTypePrice([
@@ -1117,6 +1150,18 @@ function goToBookingFromWait(id) {
     document.getElementById('piName').textContent  = item.patient_name || '-';
     document.getElementById('piRights').textContent= item.rights_type  || '-';
     document.getElementById('patientInfoBox').classList.add('show');
+  }
+  // Show waitlist room type preferences (editable)
+  const prefBox = document.getElementById('waitPrefBox');
+  if (prefBox) {
+    const clean = v => (v && v !== '-' && v !== 'null' && v !== 'undefined') ? String(v).trim() : null;
+    const prefs = [
+      { id: item.room_type_id,   name: clean(item.roomtype_name)   },
+      { id: item.room_type_id_2, name: clean(item.roomtype_name_2) },
+      { id: item.room_type_id_3, name: clean(item.roomtype_name_3) }
+    ];
+    populateWaitPrefSelects(prefs);
+    prefBox.style.display = '';
   }
 }
 
@@ -1997,7 +2042,8 @@ function renderBedsToContainer(beds, containerId) {
 
   const statusLabel = {
     available: 'ว่าง', reserved: 'จองแล้ว', occupied: 'มีผู้พัก',
-    cleaning: 'ทำความสะอาด', pending_discharge: 'รอจำหน่าย', unknown: 'ไม่ทราบ'
+    cleaning: 'ทำความสะอาด', pending_discharge: 'รอจำหน่าย',
+    maintenance: 'ซ่อมแซม', unknown: 'ไม่ทราบ'
   };
 
   let html = '';
@@ -2024,15 +2070,20 @@ function renderBedsToContainer(beds, containerId) {
       for (const bed of bedList) {
         const st    = bed.room_status || 'unknown';
         const label = statusLabel[st] || st;
-        const hasPatient = !!bed.patient_name;
+        const isMaintenance = st === 'maintenance';
+        const hasPatient = !!bed.patient_name && !isMaintenance;
         const shortName  = hasPatient
           ? bed.patient_name.split(' ').slice(0,2).join(' ')
           : '';
+        const extraStyle = isMaintenance
+          ? 'background:#FFF9C4!important;border-color:#F9A825!important;' : '';
 
-        html += `<div class="bed-box bed-${st}" onclick='openBedDetail(${JSON.stringify(bed).replace(/'/g,"&#39;")})' title="${bed.bedno} - ${label}${hasPatient ? '\n' + bed.patient_name : ''}">
+        html += `<div class="bed-box bed-${st}" style="${extraStyle}" onclick='openBedDetail(${JSON.stringify(bed).replace(/'/g,"&#39;")})' title="${bed.bedno} - ${label}">
           <div class="bed-status-dot"></div>
           <span class="bed-number">${bed.bedno}</span>
-          ${hasPatient ? `<span class="bed-patient">${shortName}</span>` : ''}
+          ${isMaintenance
+            ? `<span class="bed-patient" style="color:#F57F17;font-size:10px;font-weight:700">🔧 ซ่อมแซม</span>`
+            : hasPatient ? `<span class="bed-patient">${shortName}</span>` : ''}
         </div>`;
       }
 
@@ -2049,11 +2100,13 @@ function openBedDetail(bed) {
   const st = bed.room_status || 'unknown';
   const statusLabel = {
     available:'ว่าง', reserved:'จองแล้ว', occupied:'มีผู้พัก',
-    cleaning:'ทำความสะอาด', pending_discharge:'รอจำหน่าย', unknown:'ไม่ทราบสถานะ'
+    cleaning:'ทำความสะอาด', pending_discharge:'รอจำหน่าย',
+    maintenance:'ซ่อมแซม', unknown:'ไม่ทราบสถานะ'
   };
   const statusColor = {
     available:'#2E7D32', reserved:'#F57F17', occupied:'#C62828',
-    cleaning:'#546E7A', pending_discharge:'#6A1B9A', unknown:'#9E9E9E'
+    cleaning:'#546E7A', pending_discharge:'#6A1B9A',
+    maintenance:'#E65100', unknown:'#9E9E9E'
   };
 
   document.getElementById('roomModalTitle').textContent = `เตียง ${bed.bedno}`;
@@ -2151,6 +2204,23 @@ async function setRoomAvailable(roomId) {
 
 /* ===== SETTINGS ===== */
 let settingsRoomTypes = [];
+let roomTypesSettingsLoaded = false;
+function toggleRoomTypesSettings() {
+  const container  = document.getElementById('roomTypesSettingsContainer');
+  const chevron    = document.getElementById('roomTypesSettingsChevron');
+  const addBtn     = document.getElementById('addRoomTypeBtn');
+  const refreshBtn = document.getElementById('rtRefreshBtn');
+  const isHidden   = container.style.display === 'none';
+  container.style.display = isHidden ? 'block' : 'none';
+  chevron.style.transform  = isHidden ? 'rotate(90deg)' : '';
+  if (addBtn)     addBtn.style.display     = isHidden ? '' : 'none';
+  if (refreshBtn) refreshBtn.style.display = isHidden ? '' : 'none';
+  if (isHidden && !roomTypesSettingsLoaded) {
+    roomTypesSettingsLoaded = true;
+    loadRoomTypesSettings();
+  }
+}
+
 let hisRoomtypesLoaded = false;
 
 async function loadSettingsData() {
