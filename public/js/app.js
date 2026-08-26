@@ -999,10 +999,10 @@ async function loadWaitlist() {
       if (info) info.style.display = 'none';
     }
 
-    // กรอง HN
+    // กรอง HN — ถ้าพิมพ์ HN ให้ค้นจากทุก status (allList) เพื่อไม่ให้ status filter บัง
     const hnSearch = (document.getElementById('wlHnSearch')?.value || '').trim();
     if (hnSearch) {
-      list = list.filter(item => (item.hn || '').includes(hnSearch));
+      list = allList.filter(item => (item.hn || '').includes(hnSearch));
     }
 
     // Badge + dashboard: นับเฉพาะ waiting
