@@ -37,10 +37,15 @@ router.get('/', authCheck, async (req, res) => {
     const conditions = [];
     if (statusFilter) conditions.push(`w.status = '${statusFilter.replace(/'/g,"''")}'`);
     else if (!showAll) conditions.push(`w.status = 'waiting'`);
-    // ตัดรายการที่ AN มี confirm_discharge = 'Y' แล้วออก
-    conditions.push(`(w.an IS NULL OR w.an = '' OR NOT EXISTS (
-      SELECT 1 FROM ipt WHERE ipt.an = w.an AND ipt.confirm_discharge = 'Y'
-    ))`);
+    // ตัดออกเฉพาะเมื่อมี AN และ AN นั้น confirm_discharge='Y' (ถ้าไม่มี AN ให้แสดงปกติ)
+    conditions.push(`(
+      w.an IS NULL OR TRIM(w.an) = ''
+      OR NOT EXISTS (
+        SELECT 1 FROM ipt
+        WHERE ipt.an::text = TRIM(w.an)::text
+          AND ipt.confirm_discharge = 'Y'
+      )
+    )`);
     const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
     const rows = await query(`
       SELECT w.*,
@@ -58,11 +63,12 @@ router.get('/', authCheck, async (req, res) => {
       LEFT JOIN room_types rt3 ON rt3.id = w.room_type_id_3
       LEFT JOIN LATERAL (
         SELECT r.name AS room_name, a.bedno AS bed_no
-        FROM ipt i
-        LEFT JOIN iptadm a ON a.an = i.an
+        FROM iptadm a
         LEFT JOIN roomno r ON r.roomno = a.roomno
-        WHERE i.hn = w.hn AND r.name IS NOT NULL
-        ORDER BY i.an DESC LIMIT 1
+        WHERE w.an IS NOT NULL AND TRIM(w.an) != ''
+          AND a.an::text = TRIM(w.an)::text
+          AND r.name IS NOT NULL
+        LIMIT 1
       ) cur_room ON TRUE
       ${whereClause}
       ORDER BY w.request_date ASC

@@ -249,7 +249,7 @@ router.get('/occupants', authCheck, async (req, res) => {
       SELECT w.name as ward, rt.name as roomtype, b.bedno, r.ward as ward_code,
              tmp.an, i.regdate,
              concat(p.pname, p.fname, '  ', p.lname) as ptname,
-             dd.name as doctor,
+             MAX(dd.name) as doctor,
              EXISTS (
                SELECT 1 FROM bookings bk
                WHERE bk.room_number = b.bedno
@@ -267,8 +267,8 @@ router.get('/occupants', authCheck, async (req, res) => {
       ) tmp ON b.bedno = tmp.bedno
       LEFT OUTER JOIN ipt i ON i.an = tmp.an
       LEFT OUTER JOIN patient p ON p.hn = i.hn
-      LEFT OUTER JOIN ipt_doctor_list idl ON idl.an = i.an
-      LEFT OUTER JOIN doctor dd ON dd.code = idl.doctor AND idl.active_doctor = 'Y'
+      LEFT OUTER JOIN ipt_doctor_list idl ON idl.an = i.an AND idl.active_doctor = 'Y'
+      LEFT OUTER JOIN doctor dd ON dd.code = idl.doctor
       WHERE b.bed_status_type_id = 1
         AND r.name NOT LIKE '%รอรับ%'
         AND rt.hos_guid = 'Y'
@@ -280,7 +280,7 @@ router.get('/occupants', authCheck, async (req, res) => {
           OR w.spclty LIKE CONCAT('%', NULL, '%')
         )
       GROUP BY w.name, rt.name, b.bedno, r.ward, tmp.an, i.regdate,
-               p.pname, p.fname, p.lname, dd.name
+               p.pname, p.fname, p.lname
       ORDER BY w.name, rt.name, b.bedno
     `, [], cfg);
     res.json({ success: true, occupants: rows });
@@ -660,6 +660,14 @@ router.get('/allqueue', authCheck, async (req, res) => {
         LEFT JOIN ipt i ON i.an = w.an AND i.dchdate IS NULL
         LEFT JOIN ward wd ON wd.ward = i.ward
         WHERE w.status = 'waiting'
+          AND (
+            w.an IS NULL OR TRIM(w.an) = ''
+            OR NOT EXISTS (
+              SELECT 1 FROM ipt
+              WHERE ipt.an::text = TRIM(w.an)::text
+                AND ipt.confirm_discharge = 'Y'
+            )
+          )
         ORDER BY w.request_date ASC
       `, [], cfg),
       query(`
@@ -677,6 +685,14 @@ router.get('/allqueue', authCheck, async (req, res) => {
         LEFT JOIN ipt i ON i.an = b.an AND i.dchdate IS NULL
         LEFT JOIN ward wd ON wd.ward = i.ward
         WHERE b.status = 'reserved'
+          AND (
+            b.an IS NULL OR TRIM(b.an) = ''
+            OR NOT EXISTS (
+              SELECT 1 FROM ipt
+              WHERE ipt.an::text = TRIM(b.an)::text
+                AND ipt.confirm_discharge = 'Y'
+            )
+          )
         ORDER BY b.check_in_date ASC
       `, [], cfg)
     ]);
