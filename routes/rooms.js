@@ -146,6 +146,7 @@ const SQL_AVAILABLE_BEDS = `
   JOIN roomno r ON b.roomno = r.roomno
   JOIN roomtype rt ON rt.roomtype = r.roomtype
   JOIN ward w ON r.ward = w.ward
+  LEFT JOIN bedtype bt ON bt.bedtype = b.bedtype
   LEFT JOIN (
     SELECT bedno, d.an, ipt.regdate, ipt.dchdate
     FROM iptadm d
@@ -156,6 +157,7 @@ const SQL_AVAILABLE_BEDS = `
     AND r.name NOT LIKE '%รอรับ%'
     AND rt.hos_guid = 'Y'
     AND w.ward_active = 'Y'
+    AND COALESCE(bt.hos_guid, 'Y') = 'Y'
     AND tmp.an IS NULL
   GROUP BY b.bedno, r.ward
 `;
@@ -167,9 +169,11 @@ const SQL_ALL_BEDS = `
   LEFT OUTER JOIN roomno r ON r.roomno = b.roomno
   LEFT OUTER JOIN ward w ON w.ward = r.ward
   LEFT OUTER JOIN roomtype rt ON rt.roomtype = r.roomtype
+  LEFT OUTER JOIN bedtype bt ON bt.bedtype = b.bedtype
   WHERE rt.hos_guid = 'Y'
     AND w.ward_active = 'Y'
     AND b.bed_status_type_id IN (1, 4)
+    AND COALESCE(bt.hos_guid, 'Y') = 'Y'
   ORDER BY w.name, rt.name, b.bedno
 `;
 
