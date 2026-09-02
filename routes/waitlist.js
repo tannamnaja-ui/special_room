@@ -67,7 +67,7 @@ router.get('/', authCheck, async (req, res) => {
         LEFT JOIN roomno r ON r.roomno = a.roomno
         WHERE w.an IS NOT NULL AND TRIM(w.an) != ''
           AND a.an::text = TRIM(w.an)::text
-          AND r.name IS NOT NULL
+          AND (a.bedno IS NOT NULL AND TRIM(a.bedno) != '')
         LIMIT 1
       ) cur_room ON TRUE
       ${whereClause}
