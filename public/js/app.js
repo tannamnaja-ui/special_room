@@ -821,13 +821,21 @@ async function addToWaitlist() {
   if (!hn) return toast('กรุณากรอก HN', 'warning');
   if (!patientName) return toast('กรุณาค้นหาข้อมูลผู้ป่วยก่อน', 'warning');
 
+  const pref1Id = document.getElementById('wnPref1')?.value || null;
+  const pref2Id = document.getElementById('wnPref2')?.value || null;
+  const pref3Id = document.getElementById('wnPref3')?.value || null;
+  const getPrefName = id => id ? (allRoomTypes.find(t => String(t.id) === String(id))?.type_name || null) : null;
+
   showLoading(true);
   try {
     const res = await fetch('/api/waitlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        hn, patient_name: patientName, room_type_id: roomtype || null,
+        hn, patient_name: patientName,
+        room_type_id: pref1Id || roomtype || null,
+        room_type_id_2: pref2Id || null,
+        room_type_id_3: pref3Id || null,
         rights_type: rightsType, notes,
         no_pay_reason: document.getElementById('bnNoPayReason')?.value || null,
         an,
@@ -838,8 +846,9 @@ async function addToWaitlist() {
         deposit_amount: deposit || 0,
         contact_name: contactName, contact_phone: contactPhone,
         priority_type: (document.getElementById('bnPriorityType') || {}).value || null,
-        roomtype_code: roomtype || null,
-        roomtype_name: (() => { const s = document.getElementById('bnRoomType'); return s && s.value ? s.options[s.selectedIndex]?.text || null : null; })()
+        roomtype_name: getPrefName(pref1Id) || ((() => { const s = document.getElementById('bnRoomType'); return s && s.value ? s.options[s.selectedIndex]?.text || null : null; })()),
+        roomtype_name_2: getPrefName(pref2Id),
+        roomtype_name_3: getPrefName(pref3Id)
       })
     });
     const data = await res.json();
@@ -867,7 +876,6 @@ function clearBookingForm() {
   document.getElementById('bnRoomId').innerHTML = '<option value="">-- เลือกเตียง --</option>';
   document.getElementById('patientInfoBox').classList.remove('show');
   document.getElementById('roomPriceBox').style.display = 'none';
-  const pb = document.getElementById('waitPrefBox'); if (pb) pb.style.display = 'none';
   populateWaitPrefSelects([{},{},{}]);
   setDefaultDateTime();
   currentWaitlistId = null;
@@ -1062,8 +1070,9 @@ async function loadWaitlist() {
                      onclick="confirmWaitCheckin(${item.id},'${escAttr(item.patient_name||'')}')">✅ ยืนยันได้ห้องแล้ว</button>
                    <button class="btn btn-danger btn-sm" onclick="cancelWait(${item.id})">✕</button>
                  </div>`;
-            const anDisplay = item.an
-              ? `<span style="font-size:13px;color:#546E7A">${escHtml(item.an)}</span>`
+            const displayAn = item.an || item.effective_an || null;
+            const anDisplay = displayAn
+              ? `<span style="font-size:13px;color:${item.an ? '#546E7A' : '#1B5E20'}">${escHtml(displayAn)}${!item.an ? ' <span style="font-size:10px;color:#388E3C">(auto)</span>' : ''}</span>`
               : `<span style="font-size:12px;color:#F57C00;font-weight:600">รอ Admit</span>`;
             return `
               <tr style="${rowStyle}">
@@ -1138,6 +1147,9 @@ function goToBookingFromWait(id) {
   document.getElementById('bnNotes').value         = item.notes        || '';
   document.getElementById('bnContactName').value   = item.contact_name  || '';
   document.getElementById('bnContactPhone').value  = item.contact_phone || '';
+  if (item.check_in_date) {
+    document.getElementById('bnCheckIn').value = item.check_in_date.slice(0, 16);
+  }
   const pt = document.getElementById('bnPriorityType');
   if (pt) pt.value = item.priority_type || '';
   const rtSel = document.getElementById('bnRoomType');
@@ -1151,18 +1163,14 @@ function goToBookingFromWait(id) {
     document.getElementById('piRights').textContent= item.rights_type  || '-';
     document.getElementById('patientInfoBox').classList.add('show');
   }
-  // Show waitlist room type preferences (editable)
-  const prefBox = document.getElementById('waitPrefBox');
-  if (prefBox) {
-    const clean = v => (v && v !== '-' && v !== 'null' && v !== 'undefined') ? String(v).trim() : null;
-    const prefs = [
-      { id: item.room_type_id,   name: clean(item.roomtype_name)   },
-      { id: item.room_type_id_2, name: clean(item.roomtype_name_2) },
-      { id: item.room_type_id_3, name: clean(item.roomtype_name_3) }
-    ];
-    populateWaitPrefSelects(prefs);
-    prefBox.style.display = '';
-  }
+  // Populate waitlist room type preferences
+  const clean = v => (v && v !== '-' && v !== 'null' && v !== 'undefined') ? String(v).trim() : null;
+  const prefs = [
+    { id: item.room_type_id,   name: clean(item.roomtype_name)   },
+    { id: item.room_type_id_2, name: clean(item.roomtype_name_2) },
+    { id: item.room_type_id_3, name: clean(item.roomtype_name_3) }
+  ];
+  populateWaitPrefSelects(prefs);
 }
 
 /* ===== ASSIGN MODAL ===== */

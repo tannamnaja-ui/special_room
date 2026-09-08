@@ -55,6 +55,7 @@ router.get('/', authCheck, async (req, res) => {
         rt2.price_per_day AS price_per_day_2, rt2.food_price_per_day AS food_price_per_day_2,
         COALESCE(w.roomtype_name_3, rt3.type_name) AS type_name_3,
         rt3.price_per_day AS price_per_day_3, rt3.food_price_per_day AS food_price_per_day_3,
+        eff.effective_an,
         cur_room.room_name AS current_room_name,
         cur_room.bed_no   AS current_bed_no
       FROM waiting_list w
@@ -62,11 +63,22 @@ router.get('/', authCheck, async (req, res) => {
       LEFT JOIN room_types rt2 ON rt2.id = w.room_type_id_2
       LEFT JOIN room_types rt3 ON rt3.id = w.room_type_id_3
       LEFT JOIN LATERAL (
+        SELECT CASE
+          WHEN w.an IS NOT NULL AND TRIM(w.an) != '' THEN TRIM(w.an)
+          ELSE (
+            SELECT i.an::text FROM ipt i
+            WHERE i.hn = w.hn
+              AND (i.confirm_discharge IS NULL OR i.confirm_discharge <> 'Y')
+            ORDER BY i.an DESC LIMIT 1
+          )
+        END AS effective_an
+      ) eff ON TRUE
+      LEFT JOIN LATERAL (
         SELECT r.name AS room_name, a.bedno AS bed_no
         FROM iptadm a
         LEFT JOIN roomno r ON r.roomno = a.roomno
-        WHERE w.an IS NOT NULL AND TRIM(w.an) != ''
-          AND a.an::text = TRIM(w.an)::text
+        WHERE eff.effective_an IS NOT NULL
+          AND a.an::text = eff.effective_an
           AND (a.bedno IS NOT NULL AND TRIM(a.bedno) != '')
         LIMIT 1
       ) cur_room ON TRUE
@@ -83,9 +95,12 @@ router.get('/', authCheck, async (req, res) => {
 router.post('/', authCheck, async (req, res) => {
   const cfg = loadSettings();
   const {
-    hn, patient_name, room_type_id, preferred_room, rights_type, notes, no_pay_reason,
-    an, ward, ward_code, doctor_name, roomtype_code, roomtype_name, bedno,
-    check_in_date, check_out_date, deposit_amount, contact_name, contact_phone, priority_type
+    hn, patient_name, room_type_id, room_type_id_2, room_type_id_3,
+    preferred_room, rights_type, notes, no_pay_reason,
+    an, ward, ward_code, doctor_name, roomtype_code,
+    roomtype_name, roomtype_name_2, roomtype_name_3,
+    bedno, check_in_date, check_out_date, deposit_amount,
+    contact_name, contact_phone, priority_type
   } = req.body;
   try {
     // ถ้า HN มีอยู่ในคิวรอแล้ว ให้ update แทน insert ใหม่
@@ -95,25 +110,37 @@ router.post('/', authCheck, async (req, res) => {
     );
     if (existing && existing.length > 0) {
       await query(
-        `UPDATE waiting_list SET an=$1, patient_name=$2, ward=$3, doctor_name=$4, room_type_id=$5, preferred_room=$6,
-         rights_type=$7, notes=$8, contact_name=$9, contact_phone=$10, priority_type=$11,
-         roomtype_code=$12, roomtype_name=$13, check_in_date=$14, no_pay_reason=$15,
-         request_date=CURRENT_TIMESTAMP WHERE id=$16`,
+        `UPDATE waiting_list SET an=$1, patient_name=$2, ward=$3, doctor_name=$4,
+         room_type_id=$5, room_type_id_2=$6, room_type_id_3=$7,
+         preferred_room=$8, rights_type=$9, notes=$10,
+         contact_name=$11, contact_phone=$12, priority_type=$13,
+         roomtype_code=$14, roomtype_name=$15, roomtype_name_2=$16, roomtype_name_3=$17,
+         check_in_date=$18, no_pay_reason=$19
+         WHERE id=$20`,
         [an||null, patient_name, ward||ward_code||null, doctor_name||null,
-         room_type_id, preferred_room, rights_type, notes,
+         room_type_id||null, room_type_id_2||null, room_type_id_3||null,
+         preferred_room||null, rights_type, notes,
          contact_name||null, contact_phone||null, priority_type||null,
-         roomtype_code||null, roomtype_name||null, check_in_date||null,
-         no_pay_reason||null, existing[0].id],
+         roomtype_code||null, roomtype_name||null, roomtype_name_2||null, roomtype_name_3||null,
+         check_in_date||null, no_pay_reason||null, existing[0].id],
         cfg
       );
     } else {
       await query(
-        `INSERT INTO waiting_list (hn, an, patient_name, ward, doctor_name, room_type_id, preferred_room, rights_type, notes, no_pay_reason, check_in_date, contact_name, contact_phone, priority_type, roomtype_code, roomtype_name, status, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'waiting',$17)`,
+        `INSERT INTO waiting_list
+           (hn, an, patient_name, ward, doctor_name,
+            room_type_id, room_type_id_2, room_type_id_3,
+            preferred_room, rights_type, notes, no_pay_reason, check_in_date,
+            contact_name, contact_phone, priority_type,
+            roomtype_code, roomtype_name, roomtype_name_2, roomtype_name_3,
+            status, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,'waiting',$21)`,
         [hn, an||null, patient_name, ward||ward_code||null, doctor_name||null,
-         room_type_id, preferred_room, rights_type, notes, no_pay_reason||null, check_in_date||null,
+         room_type_id||null, room_type_id_2||null, room_type_id_3||null,
+         preferred_room||null, rights_type, notes, no_pay_reason||null, check_in_date||null,
          contact_name||null, contact_phone||null, priority_type||null,
-         roomtype_code||null, roomtype_name||null, req.session.user.login_name],
+         roomtype_code||null, roomtype_name||null, roomtype_name_2||null, roomtype_name_3||null,
+         req.session.user.login_name],
         cfg
       );
     }
