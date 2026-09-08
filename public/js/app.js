@@ -2502,12 +2502,16 @@ function fmtRoomTypePrice(typeName, pricePerDay, foodPrice) {
     <span style="font-size:11px;color:#1565C0;font-weight:600">3. รวม ${fmt(tot)} ฿/วัน</span>`;
 }
 function fmtMultiRoomTypePrice(entries) {
-  // entries = [{name, price, food}, ...]  สูงสุด 3 ลำดับ — แสดงเฉพาะชื่อ
+  const fmt = v => { const n = parseFloat(v)||0; return n ? n.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:0}) : null; };
   const valid = entries.filter(e => e && e.name && e.name !== '-' && e.name !== 'null' && e.name !== 'undefined');
   if (!valid.length) return '-';
-  if (valid.length === 1) return escHtml(valid[0].name);
+  const renderOne = (e) => {
+    const p = fmt(e.price);
+    return p ? `${escHtml(e.name)} <span style="color:#1565C0;font-weight:600">${p} บาท</span>` : escHtml(e.name);
+  };
+  if (valid.length === 1) return renderOne(valid[0]);
   return valid.map((e, idx) =>
-    `<div style="margin-bottom:2px"><span style="font-size:11px;color:#90A4AE;font-weight:600">ลำดับ${idx+1}.</span> ${escHtml(e.name)}</div>`
+    `<div style="margin-bottom:2px"><span style="font-size:11px;color:#90A4AE;font-weight:600">ลำดับ${idx+1}.</span> ${renderOne(e)}</div>`
   ).join('');
 }
 function escAttr(s) {
