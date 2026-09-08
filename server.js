@@ -15,6 +15,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+// เมื่อ bundle ด้วย pkg ให้ใช้ public folder ข้างๆ exe จริง
+// เมื่อ run ด้วย node ปกติ ใช้ __dirname
+const isPackaged = typeof process.pkg !== 'undefined';
+const publicDir = isPackaged
+  ? path.join(path.dirname(process.execPath), 'public')
+  : path.join(__dirname, 'public');
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -30,14 +37,13 @@ app.use(session({
 app.use((req, res, next) => { req.io = io; next(); });
 
 // ต้องเช็ค login ก่อนเสมอ (ทั้ง '/' และ '/index.html') — ต้องอยู่ก่อน express.static
-// เพราะ static จะเสิร์ฟ index.html ให้ตรงๆทันทีถ้าเจอไฟล์ ไม่ผ่านการเช็ค session เลย
 app.get(['/', '/index.html'], (req, res) => {
   if (!loadSettings()) return res.redirect('/settings.html');
   if (!req.session.user) return res.redirect('/login.html');
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(publicDir, 'index.html'));
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(publicDir));
 
 app.use('/api/auth', authRouter);
 app.use('/api/rooms', roomsRouter);
