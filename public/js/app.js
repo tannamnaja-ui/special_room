@@ -2503,11 +2503,14 @@ function fmtRoomTypePrice(typeName, pricePerDay, foodPrice) {
 }
 function fmtMultiRoomTypePrice(entries) {
   const fmt = v => { const n = parseFloat(v)||0; return n ? n.toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:0}) : null; };
+  const hasPrice = name => /[\d,]+\s*บาท/.test(name);
   const valid = entries.filter(e => e && e.name && e.name !== '-' && e.name !== 'null' && e.name !== 'undefined');
   if (!valid.length) return '-';
   const renderOne = (e) => {
     const p = fmt(e.price);
-    return p ? `${escHtml(e.name)} <span style="color:#1565C0;font-weight:600">${p} บาท</span>` : escHtml(e.name);
+    const nameStr = escHtml(e.name);
+    if (!p || hasPrice(e.name)) return nameStr;
+    return `${nameStr} <span style="color:#1565C0;font-weight:600">${p} บาท</span>`;
   };
   if (valid.length === 1) return renderOne(valid[0]);
   return valid.map((e, idx) =>
