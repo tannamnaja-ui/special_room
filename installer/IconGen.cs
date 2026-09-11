@@ -37,13 +37,28 @@ class IconGen
                 g.DrawEllipse(pen, rect);
             }
 
-            // ตัวอักษร R สีขาว กึ่งกลางวงกลม
-            using (var font = new Font("Segoe UI", size * 0.52f, FontStyle.Bold, GraphicsUnit.Pixel))
-            using (var textBrush = new SolidBrush(Color.White))
+            // คำว่า Room สีขาว กึ่งกลางวงกลม — ย่อ/ขยายฟอนต์ให้พอดีความกว้างด้านในวงกลมเสมอ
+            // (ไอคอนมีหลายขนาดตั้งแต่ 16px ถึง 256px ถ้า fix ขนาดฟอนต์ไว้ ตัวอักษรจะล้นในขนาดเล็ก)
+            const string text = "Room";
+            float maxWidth = size * 0.74f;   // ความกว้างที่ยอมให้ข้อความกินภายในวงกลม
             using (var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+            using (var textBrush = new SolidBrush(Color.White))
             {
-                var textRect = new RectangleF(0, size * -0.03f, size, size);
-                g.DrawString("R", font, textBrush, textRect, fmt);
+                float fontSize = size * 0.30f;
+                for (int i = 0; i < 24; i++)
+                {
+                    using (var probe = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel))
+                    {
+                        var sz = g.MeasureString(text, probe);
+                        if (sz.Width <= maxWidth) break;
+                        fontSize *= maxWidth / sz.Width;
+                    }
+                }
+                using (var font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel))
+                {
+                    var textRect = new RectangleF(0, size * -0.02f, size, size);
+                    g.DrawString(text, font, textBrush, textRect, fmt);
+                }
             }
         }
         return bmp;
@@ -100,5 +115,14 @@ class IconGen
         }
 
         Console.WriteLine("Icon written: " + outPath);
+
+        // อาร์กิวเมนต์ที่สอง = เขียนไฟล์ PNG ไว้ดูหน้าตาไอคอน (ICO ที่ฝังเฟรมแบบ PNG
+        // เปิดดูตรง ๆ ด้วย System.Drawing.Icon ไม่ได้ทุกขนาด)
+        if (args.Length > 1)
+        {
+            using (var bmp = DrawFrame(256))
+                bmp.Save(args[1], System.Drawing.Imaging.ImageFormat.Png);
+            Console.WriteLine("Preview written: " + args[1]);
+        }
     }
 }

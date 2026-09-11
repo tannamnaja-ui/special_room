@@ -3,7 +3,7 @@
 ; plus a hidden-window C# launcher (no console window shown to the user).
 
 #define MyAppName "Special Room System"
-#define MyAppVersion "1.0.7"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Hospital Private Room System"
 #define MyAppExeName "Launcher.exe"
 
@@ -32,18 +32,39 @@ Name: "thai"; MessagesFile: "compiler:Languages\Thai.isl"
 [Files]
 Source: "Launcher.exe"; DestDir: "{app}"; Flags: ignoreversion restartreplace
 Source: "..\build\server\special_room-server.exe"; DestDir: "{app}\server"; Flags: ignoreversion restartreplace
+; ตัวติดตั้ง .NET Framework 4.8 แบบ offline — แตกลง {tmp} เฉพาะตอนที่เครื่องปลายทางยังไม่มี .NET 4.8
+; (Windows 10 1903 ขึ้นไปและ Windows 11 มีมาให้อยู่แล้ว จึงมักถูกข้ามไป ไม่เสียเวลาแตกไฟล์)
+Source: "..\prereq\ndp48-offline.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedsDotNet48
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 
 [Run]
+; ติดตั้ง .NET Framework 4.8 จากไฟล์ที่แนบมาในตัว setup (ไม่ต้องต่ออินเทอร์เน็ต)
+; ข้ามอัตโนมัติถ้าเครื่องมี .NET 4.8 อยู่แล้ว — shellexec เพื่อให้ Windows ขอสิทธิ์ผู้ดูแลระบบให้เอง
+Filename: "{tmp}\ndp48-offline.exe"; Parameters: "/q /norestart"; \
+  StatusMsg: "กำลังติดตั้ง .NET Framework 4.8 (จำเป็นต้องใช้ครั้งเดียว)..."; \
+  Check: NeedsDotNet48; Flags: shellexec waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Description: "เปิดใช้งาน {#MyAppName}"; Flags: nowait postinstall
 
 [Code]
 var
   g_HasConfigBackup: Boolean;
   g_ConfigBackupPath: String;
+
+// ตรวจว่าเครื่องมี .NET Framework 4.8 แล้วหรือยัง (Launcher.exe ต้องใช้)
+// ค่า Release ในรีจิสทรี: 528040 ขึ้นไป = 4.8 หรือใหม่กว่า
+// คืน True เมื่อ "ยังไม่มี" เท่านั้น — ถ้ามีอยู่แล้วจะข้ามการติดตั้งตัวนี้ไปเลย
+function NeedsDotNet48(): Boolean;
+var
+  release: Cardinal;
+begin
+  Result := True;
+  if RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', release) then
+    if release >= 528040 then
+      Result := False;
+end;
 
 // ลบ/ถอนการติดตั้งเวอร์ชันเดิมแบบเงียบก่อนติดตั้งเวอร์ชันใหม่ (ตรวจจากรีจิสทรีของ AppId เดียวกัน)
 function GetUninstallString(): String;
