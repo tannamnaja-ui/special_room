@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const session = require('express-session');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const { loadSettings, query } = require('./config/db');
 const authRouter = require('./routes/auth');
@@ -16,12 +17,18 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// เมื่อ bundle ด้วย pkg ให้ใช้ public folder ข้างๆ exe จริง
+// เมื่อ bundle ด้วย pkg: ใช้ public folder ข้าง ๆ exe ถ้ามี (แก้ไขหน้าเว็บได้โดยไม่ต้อง build ใหม่)
+// ถ้าไม่มีโฟลเดอร์นั้น ให้ถอยไปใช้ชุดที่ pkg ฝังมาใน exe แทน — ไม่งั้นหน้าเว็บทุกหน้าจะ 404
+// (เช่น Cannot GET /settings.html) เมื่อเครื่องปลายทางมีแต่ไฟล์ exe อย่างเดียว
 // เมื่อ run ด้วย node ปกติ ใช้ __dirname
 const isPackaged = typeof process.pkg !== 'undefined';
-const publicDir = isPackaged
-  ? path.join(path.dirname(process.execPath), 'public')
-  : path.join(__dirname, 'public');
+const snapshotPublic = path.join(__dirname, 'public');
+let publicDir = snapshotPublic;
+if (isPackaged) {
+  const externalPublic = path.join(path.dirname(process.execPath), 'public');
+  publicDir = fs.existsSync(path.join(externalPublic, 'index.html')) ? externalPublic : snapshotPublic;
+}
+console.log('Serving web files from:', publicDir);
 
 app.use(cors());
 app.use(express.json());

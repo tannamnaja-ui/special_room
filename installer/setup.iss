@@ -32,6 +32,9 @@ Name: "thai"; MessagesFile: "compiler:Languages\Thai.isl"
 [Files]
 Source: "Launcher.exe"; DestDir: "{app}"; Flags: ignoreversion restartreplace
 Source: "..\build\server\special_room-server.exe"; DestDir: "{app}\server"; Flags: ignoreversion restartreplace
+; หน้าเว็บทั้งหมด ติดตั้งไว้ข้าง ๆ exe ด้วย เพื่อให้แก้ไข/อัปเดตหน้าเว็บได้โดยไม่ต้อง build ใหม่
+; (ตัว exe มีชุดสำรองฝังอยู่ในตัวอยู่แล้ว ถ้าโฟลเดอร์นี้หายไปโปรแกรมก็ยังทำงานได้)
+Source: "..\public\*"; DestDir: "{app}\server\public"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; ตัวติดตั้ง .NET Framework 4.8 แบบ offline — แตกลง {tmp} เฉพาะตอนที่เครื่องปลายทางยังไม่มี .NET 4.8
 ; (Windows 10 1903 ขึ้นไปและ Windows 11 มีมาให้อยู่แล้ว จึงมักถูกข้ามไป ไม่เสียเวลาแตกไฟล์)
 Source: "..\prereq\ndp48-offline.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedsDotNet48
