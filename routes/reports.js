@@ -166,24 +166,35 @@ const ROOM_STAY_CTE = `
     LEFT JOIN ward w ON w.ward = m.ward
     LEFT JOIN roomno rn ON rn.roomno = m.roomno
     WHERE bt.hos_guid = 'Y'
+  ),
+  -- แตกแต่ละช่วงการเข้าพักออกเป็น "รายวัน" แล้วตัดวันซ้ำทิ้ง (DISTINCT an + เตียง + วันที่)
+  -- เพราะ HIS มีการบันทึกย้ายเตียงซ้ำ/ย้ายไป-กลับในวันเดียวกัน ถ้านับตามช่วงเวลาจะได้วันนอนเกินจริง
+  -- เช่น AN ที่ถูกบันทึกเข้าเตียงเดิม 3 ครั้งในวันเดียว จะกลายเป็น 3 วัน ทั้งที่อยู่จริงวันเดียว
+  room_days AS (
+    SELECT DISTINCT rs.an, rs.bedno, rs.roomno, rs.room_name, rs.ward_code, rs.ward_name,
+           rs.room_price, d::date AS stay_date
+    FROM room_stay rs,
+         LATERAL generate_series(rs.indate::date, rs.outdate::date, interval '1 day') d
   )
 `;
 
 // 4) สรุปจำนวนห้องที่ใช้ และรายได้รวมต่อห้อง — group ตามห้อง (bedno) จากประวัติการย้ายเตียงจริง (iptbedmove)
+// จำนวนวันนอน = จำนวนวันที่ผู้ป่วยอยู่ในเตียงพิเศษนั้นจริง นับแบบไม่ซ้ำวัน (ดู room_days)
+// ช่วงวันที่ที่เลือกกรองที่ "วันที่อยู่ในห้อง" จึงนับเฉพาะวันที่ตกอยู่ในช่วงนั้น แม้การเข้าพักจะคร่อมช่วง
 router.get('/rooms-revenue', authCheck, async (req, res) => {
   const cfg = loadSettings();
   try {
     const { from, to, ward } = req.query;
     const params = [];
-    let where = dateRangeClause('indate', from, to, params);
+    let where = dateRangeClause('stay_date', from, to, params);
     where += wardClause('ward_code', ward, params);
     const rows = await query(`
       ${ROOM_STAY_CTE}
       SELECT bedno as room_number, roomno, room_name,
-             COUNT(*) as bookings_count,
-             SUM(nights) as nights,
-             SUM(nights * COALESCE(room_price,0)) as revenue
-      FROM room_stay
+             COUNT(DISTINCT an) as bookings_count,
+             COUNT(*) as nights,
+             SUM(COALESCE(room_price,0)) as revenue
+      FROM room_days
       WHERE 1=1 ${where}
       GROUP BY bedno, roomno, room_name
       ORDER BY revenue DESC
