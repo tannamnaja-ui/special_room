@@ -63,6 +63,10 @@
         <span class="nav-icon">🏨</span>
         <span>ชื่อผู้จองและรอคิวทั้งหมด<br><span style="font-size:11px;opacity:0.8">(รอจัดการ)</span></span>
       </a>
+      <a class="nav-item" id="nav-reports" onclick="switchTab('reports')">
+        <span class="nav-icon">📊</span>
+        <span>สรุปรายงานการใช้ห้อง</span>
+      </a>
     </div>
 
     <div class="sidebar-footer">
@@ -577,6 +581,42 @@
         </div>
       </div>
 
+      <!-- ===== TAB: REPORTS (สรุปรายงานการใช้ห้อง) ===== -->
+      <div class="tab-panel" id="panel-reports">
+        <!-- Hub: การ์ดปุ่มรายงานทั้งหมด -->
+        <div id="reportsHub">
+          <div class="report-cards-grid" id="reportCardsGrid"></div>
+        </div>
+
+        <!-- Detail: แสดงผลรายงานที่เลือก -->
+        <div id="reportsDetail" style="display:none">
+          <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07);overflow:hidden">
+            <div class="section-header" style="flex-wrap:wrap;gap:10px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <button class="btn btn-secondary btn-sm" onclick="showReportsHub()">← กลับ</button>
+                <h3 id="reportDetailTitle" style="margin:0"></h3>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <select id="reportWardFilter" class="select-control" style="width:200px;padding:6px 10px;font-size:13px" onchange="loadCurrentReport()">
+                  <option value="">— ทุก Ward —</option>
+                </select>
+                <input type="date" id="reportFromDate" class="form-control" style="width:150px;padding:6px 10px;font-size:13px">
+                <span style="font-size:13px;color:#90A4AE">ถึง</span>
+                <input type="date" id="reportToDate" class="form-control" style="width:150px;padding:6px 10px;font-size:13px">
+                <button class="btn btn-secondary btn-sm" onclick="loadCurrentReport()">🔍 ค้นหา</button>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('reportWardFilter').value='';document.getElementById('reportFromDate').value='';document.getElementById('reportToDate').value='';loadCurrentReport()">🔄 ทั้งหมด</button>
+                <button class="btn btn-sm" onclick="exportCurrentReportCSV()" style="background:#1B5E20;color:#fff;padding:6px 14px;font-size:13px">📊 CSV</button>
+                <button class="btn btn-sm" onclick="printCurrentReport()" style="background:#1565C0;color:#fff;padding:6px 14px;font-size:13px">🖨️ พิมพ์</button>
+              </div>
+            </div>
+            <div id="reportDetailNote" style="padding:10px 20px;font-size:12px;color:#90A4AE;background:#FFFDE7;border-bottom:1px solid #f0f4f8;display:none"></div>
+            <div id="reportDetailContent" style="padding:20px">
+              <div class="empty-state"><div class="spinner" style="margin:0 auto"></div><p style="margin-top:12px">กำลังโหลด...</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== TAB: SETTINGS ===== -->
       <div class="tab-panel" id="panel-settings">
         <div style="display:flex;flex-direction:column;gap:20px">
@@ -844,5 +884,6 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/app.js"></script>
+<script src="/js/reports.js"></script>
 </body>
 </html>

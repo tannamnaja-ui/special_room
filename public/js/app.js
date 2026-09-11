@@ -73,6 +73,7 @@ const tabTitles = {
   waitlist:     '⏳ คิวรอห้องพัก (จองคิวไว้ ยังไม่ได้ห้อง)',
   current:      '🛏️ ผู้พักและการจองปัจจุบัน',
   allrooms:     '🏨 ชื่อผู้จองและรอคิวทั้งหมด (รอจัดการ)',
+  reports:      '📊 สรุปรายงานการใช้ห้อง',
   settings:     '⚙️ ตั้งค่าระบบ'
 };
 
@@ -86,6 +87,7 @@ function switchTab(tab) {
   if (tab === 'allrooms')     loadAllQueue();
   if (tab === 'settings')     loadSettingsData();
   if (tab === 'reservations') loadReservations();
+  if (tab === 'reports')      { renderReportCards(); showReportsHub(); }
 }
 
 /* ===== TOAST ===== */

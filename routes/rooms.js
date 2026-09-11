@@ -449,3 +449,4 @@ router.post('/seed-demo', authCheck, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.ensureTables = ensureTables;

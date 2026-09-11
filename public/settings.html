@@ -145,14 +145,28 @@
       box.style.display = 'flex';
     }
 
+    // ตัดอักขระแฝงที่มักติดมาจากการ copy-paste รหัสผ่าน (เว้นวรรค/ขึ้นบรรทัดใหม่/tab/zero-width)
+    // ถ้าไม่ตัด PostgreSQL จะตอบ SASL authentication failed (08P01) ซึ่งดูเหมือนรหัสผ่านผิด
+    let lastPwCleaned = false;
+    function cleanPassword(raw) {
+      const cleaned = String(raw || '')
+        .replace(/[​-‍﻿]/g, '')
+        .replace(/^[\s\r\n\t]+|[\s\r\n\t]+$/g, '');
+      lastPwCleaned = cleaned !== String(raw || '');
+      return cleaned;
+    }
+
     function getFormData() {
+      const pwField = document.getElementById('db_password');
+      const password = cleanPassword(pwField.value);
+      if (lastPwCleaned) pwField.value = password;   // ให้ผู้ใช้เห็นค่าที่ใช้จริง
       return {
         db_type: selectedDb,
         host: document.getElementById('host').value.trim(),
         port: document.getElementById('port').value.trim(),
         database: document.getElementById('database').value.trim(),
         username: document.getElementById('db_username').value.trim(),
-        password: document.getElementById('db_password').value
+        password
       };
     }
 
@@ -181,7 +195,12 @@
           body: JSON.stringify(data)
         });
         const result = await res.json();
-        showAlert(result.message, result.success ? 'success' : 'error');
+        if (result.success && lastPwCleaned)
+          showAlert(result.message + ' (ตัดช่องว่างที่ติดมากับรหัสผ่านออกแล้ว)', 'success');
+        else if (!result.success && lastPwCleaned)
+          showAlert(result.message + '<br>⚠️ ตรวจพบช่องว่างติดมากับรหัสผ่าน ระบบตัดออกให้แล้ว — ลองกดทดสอบอีกครั้ง', 'error');
+        else
+          showAlert(result.message, result.success ? 'success' : 'error');
       } catch (e) {
         showAlert('ไม่สามารถเชื่อมต่อ server ได้');
       } finally {

@@ -206,6 +206,7 @@ router.patch('/:id/confirm', authCheck, async (req, res) => {
     await query(`UPDATE rooms SET status = 'reserved' WHERE id = $1`, [room_id], cfg);
     // Remove from waitlist
     await query(`UPDATE waiting_list SET status = 'assigned' WHERE id = $1`, [req.params.id], cfg);
+    try { await query(`UPDATE waiting_list SET assigned_at = CURRENT_TIMESTAMP WHERE id = $1`, [req.params.id], cfg); } catch {}
 
     req.io.emit('room_updated');
     req.io.emit('waitlist_updated');
@@ -224,6 +225,7 @@ router.patch('/:id/checkedin', authCheck, async (req, res) => {
     const item = rows[0];
 
     await query(`UPDATE waiting_list SET status = 'checkedin' WHERE id = $1`, [req.params.id], cfg);
+    try { await query(`UPDATE waiting_list SET checkedin_at = CURRENT_TIMESTAMP, assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP) WHERE id = $1`, [req.params.id], cfg); } catch {}
 
     // อัพ roomtype_reserve → room_reserve_status_id = 2
     try {
@@ -271,6 +273,12 @@ router.patch('/:id/cancel', authCheck, async (req, res) => {
 router.patch('/by-hn/:hn/assign', authCheck, async (req, res) => {
   const cfg = loadSettings();
   try {
+    try {
+      await query(
+        `UPDATE waiting_list SET assigned_at = CURRENT_TIMESTAMP WHERE hn = $1 AND status = 'waiting'`,
+        [req.params.hn], cfg
+      );
+    } catch {}
     await query(
       `UPDATE waiting_list SET status = 'assigned' WHERE hn = $1 AND status = 'waiting'`,
       [req.params.hn], cfg

@@ -7,6 +7,30 @@ function md5(str) {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
+// แปลรหัสข้อผิดพลาดของ driver เป็นสาเหตุที่อ่านเข้าใจได้
+function dbErrorHint(err, cfg) {
+  const code = err.code || '';
+  const msg  = err.message || '';
+  const isPg = (cfg?.db_type || '') === 'postgresql';
+
+  // 08P01 = PgBouncer ตอบเมื่อ SASL/SCRAM ไม่ผ่าน, 28P01 = PostgreSQL ตอบตรง ๆ
+  if (code === '08P01' || code === '28P01' || /SASL|password authentication failed/i.test(msg))
+    return 'Username หรือ Password ไม่ถูกต้อง (ระวังช่องว่างที่ติดมาจากการคัดลอก)';
+  if (code === 'ER_ACCESS_DENIED_ERROR' || code === 'ER_NOT_SUPPORTED_AUTH_MODE')
+    return 'Username หรือ Password ไม่ถูกต้อง';
+  if (code === '28000')
+    return 'เซิร์ฟเวอร์ไม่อนุญาตให้ผู้ใช้นี้เชื่อมต่อจากเครื่องนี้ (ตรวจ pg_hba.conf)';
+  if (code === '3D000' || code === 'ER_BAD_DB_ERROR')
+    return `ไม่พบฐานข้อมูลชื่อ "${cfg?.database || ''}" บนเซิร์ฟเวอร์นี้`;
+  if (code === 'ECONNREFUSED')
+    return `ไม่มีบริการฐานข้อมูลรับที่ ${cfg?.host}:${cfg?.port} ` +
+           (isPg ? '(PostgreSQL ปกติ 5432, PgBouncer ปกติ 6432)' : '(MySQL ปกติ 3306)');
+  if (code === 'ETIMEDOUT' || code === 'ENOTFOUND' || code === 'EHOSTUNREACH' ||
+      /connection timeout|timeout expired|connect ETIMEDOUT/i.test(msg))
+    return `ติดต่อเครื่อง ${cfg?.host}:${cfg?.port} ไม่ได้ — ตรวจ IP / เครือข่าย / Firewall`;
+  return null;
+}
+
 // Test DB connection
 router.post('/test-connection', async (req, res) => {
   const cfg = req.body;
@@ -14,7 +38,13 @@ router.post('/test-connection', async (req, res) => {
     await testConnection(cfg);
     res.json({ success: true, message: 'เชื่อมต่อสำเร็จ!' });
   } catch (err) {
-    res.json({ success: false, message: `เชื่อมต่อไม่สำเร็จ: ${err.message}` });
+    const hint = dbErrorHint(err, cfg);
+    res.json({
+      success: false,
+      message: hint
+        ? `เชื่อมต่อไม่สำเร็จ: ${hint}${err.code ? ` [${err.code}]` : ''}`
+        : `เชื่อมต่อไม่สำเร็จ: ${err.message}`
+    });
   }
 });
 

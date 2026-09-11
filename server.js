@@ -10,6 +10,7 @@ const authRouter = require('./routes/auth');
 const roomsRouter = require('./routes/rooms');
 const bookingsRouter = require('./routes/bookings');
 const waitlistRouter = require('./routes/waitlist');
+const reportsRouter = require('./routes/reports');
 
 const app = express();
 const server = http.createServer(app);
@@ -49,6 +50,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/rooms', roomsRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/waitlist', waitlistRouter);
+app.use('/api/reports', reportsRouter);
 
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
@@ -67,6 +69,19 @@ async function runMigrations() {
         await query(`ALTER TABLE waiting_list ADD COLUMN check_in_date VARCHAR(50)`, [], cfg);
     }
   } catch {}
+
+  // คอลัมน์เวลาที่ได้ห้อง/เข้าพัก — ใช้คำนวณรายงานระยะเวลารอคอย
+  for (const col of ['assigned_at', 'checkedin_at']) {
+    try {
+      if (cfg.db_type === 'postgresql') {
+        await query(`ALTER TABLE waiting_list ADD COLUMN IF NOT EXISTS ${col} TIMESTAMP`, [], cfg);
+      } else {
+        const cols = await query(`SHOW COLUMNS FROM waiting_list LIKE '${col}'`, [], cfg);
+        if (!cols || cols.length === 0)
+          await query(`ALTER TABLE waiting_list ADD COLUMN ${col} TIMESTAMP NULL`, [], cfg);
+      }
+    } catch {}
+  }
 }
 
 const PORT = process.env.PORT || 3003;
