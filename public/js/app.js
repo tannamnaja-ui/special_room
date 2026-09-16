@@ -6,7 +6,10 @@ let currentUser = null;
 let assignWaitId = null;
 let waitlistItems = [];
 let currentWaitlistId = null;
-const socket = io();
+// ถ้าสคริปต์ socket.io โหลดไม่สำเร็จ ให้ใช้ตัวหลอกแทน — ไม่งั้น ReferenceError ตรงนี้
+// จะทำให้ทั้งไฟล์ app.js หยุดทำงาน หน้าเว็บจะกดอะไรไม่ได้และไม่ขึ้นชื่อผู้ใช้เลย
+const socket = (typeof io !== 'undefined') ? io() : { on() {}, emit() {} };
+if (typeof io === 'undefined') console.warn('socket.io ใช้งานไม่ได้ — ระบบจะไม่อัปเดตอัตโนมัติ (real-time) แต่ใช้งานส่วนอื่นได้ปกติ');
 
 /* ===== INIT ===== */
 document.addEventListener('DOMContentLoaded', async () => {
