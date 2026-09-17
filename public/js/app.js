@@ -1057,6 +1057,7 @@ async function loadWaitlist() {
             <th>วันที่เข้าพัก</th>
             <th>หมายเหตุ</th>
             <th>วันที่/เวลาลงข้อมูล</th>
+            <th>ผู้ทำการจอง</th>
             <th>สถานะ</th>
             <th>การดำเนินการ</th>
           </tr>
@@ -1098,6 +1099,7 @@ async function loadWaitlist() {
                 <td style="font-size:13px">${item.check_in_date ? new Date(item.check_in_date).toLocaleDateString('th-TH') : '-'}</td>
                 <td style="font-size:13px;max-width:150px;white-space:normal">${escHtml(item.notes||'-')}</td>
                 <td style="font-size:13px">${escHtml(dateStr)}</td>
+                <td style="font-size:13px;white-space:normal;max-width:150px">${escHtml(item.created_by_name || '-')}</td>
                 <td>${statusChip[item.status] || escHtml(item.status)}</td>
                 <td>${actions}</td>
               </tr>`;

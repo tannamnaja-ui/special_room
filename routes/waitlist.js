@@ -57,8 +57,12 @@ router.get('/', authCheck, async (req, res) => {
         rt3.price_per_day AS price_per_day_3, rt3.food_price_per_day AS food_price_per_day_3,
         eff.effective_an,
         cur_room.room_name AS current_room_name,
-        cur_room.bed_no   AS current_bed_no
+        cur_room.bed_no   AS current_bed_no,
+        -- ชื่อผู้ทำการจอง: เทียบ created_by (login_name) กับตาราง officer
+        -- ถ้าหาไม่เจอ (เช่นผู้ใช้ถูกลบไปแล้ว) ให้แสดง login_name ที่บันทึกไว้แทน
+        COALESCE(ofc.officer_name, w.created_by) AS created_by_name
       FROM waiting_list w
+      LEFT JOIN officer ofc ON ofc.officer_login_name = w.created_by
       LEFT JOIN room_types rt  ON rt.id  = w.room_type_id
       LEFT JOIN room_types rt2 ON rt2.id = w.room_type_id_2
       LEFT JOIN room_types rt3 ON rt3.id = w.room_type_id_3
