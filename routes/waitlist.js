@@ -37,13 +37,15 @@ router.get('/', authCheck, async (req, res) => {
     const conditions = [];
     if (statusFilter) conditions.push(`w.status = '${statusFilter.replace(/'/g,"''")}'`);
     else if (!showAll) conditions.push(`w.status = 'waiting'`);
-    // ตัดออกเฉพาะเมื่อมี AN และ AN นั้น confirm_discharge='Y' (ถ้าไม่มี AN ให้แสดงปกติ)
+    // ตัดคนไข้ที่จำหน่ายแล้วออกจากคิวรอ — นับว่าจำหน่ายเมื่อ AN นั้นมีวันจำหน่าย (dchdate)
+    // หรือถูกยืนยันจำหน่าย (confirm_discharge='Y') อย่างใดอย่างหนึ่ง เพราะบาง รพ. ใช้ช่องไม่เหมือนกัน
+    // คิวที่ยังไม่กรอก AN คือการจองล่วงหน้า (ยังไม่ admit) จึงคงไว้ในหน้าจอตามเดิม
     conditions.push(`(
       w.an IS NULL OR TRIM(w.an) = ''
       OR NOT EXISTS (
         SELECT 1 FROM ipt
         WHERE ipt.an::text = TRIM(w.an)::text
-          AND ipt.confirm_discharge = 'Y'
+          AND (ipt.dchdate IS NOT NULL OR ipt.confirm_discharge = 'Y')
       )
     )`);
     const whereClause = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -70,8 +72,11 @@ router.get('/', authCheck, async (req, res) => {
         SELECT CASE
           WHEN w.an IS NOT NULL AND TRIM(w.an) != '' THEN TRIM(w.an)
           ELSE (
+            -- หา AN ที่กำลังนอนอยู่จริงเท่านั้น (ยังไม่จำหน่าย) ไม่งั้นจะเผลอเอา AN เก่า
+            -- ที่จำหน่ายไปแล้วมาแสดงเป็น "AN (auto)" พร้อมห้องปัจจุบันของการนอนครั้งก่อน
             SELECT i.an::text FROM ipt i
             WHERE i.hn = w.hn
+              AND i.dchdate IS NULL
               AND (i.confirm_discharge IS NULL OR i.confirm_discharge <> 'Y')
             ORDER BY i.an DESC LIMIT 1
           )
