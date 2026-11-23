@@ -551,6 +551,13 @@ router.post('/', authCheck, async (req, res) => {
           [parseInt(waiting_list_id)], cfg
         );
       } catch (e) {}
+      // เวลาได้ห้อง — ใช้ในรายงานระยะเวลารอคอย (แยก query เผื่อฐานเก่ายังไม่มีคอลัมน์ assigned_at)
+      try {
+        await query(
+          `UPDATE waiting_list SET assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP) WHERE id = $1`,
+          [parseInt(waiting_list_id)], cfg
+        );
+      } catch (e) {}
     }
 
     req.io.emit('room_updated');

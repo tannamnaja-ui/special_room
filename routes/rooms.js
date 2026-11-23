@@ -7,7 +7,31 @@ function authCheck(req, res, next) {
   next();
 }
 
-async function ensureTables(cfg) {
+// ตรวจ/สร้างตารางแค่ครั้งแรกต่อฐานข้อมูล แล้วจำผลไว้ — ห้ามรันทุก request เพราะ ALTER TABLE
+// ต้องขอ ACCESS EXCLUSIVE lock แม้คอลัมน์มีอยู่แล้ว ทำให้คำสั่งอื่นบนตารางนั้นต่อคิวรอจนระบบช้า
+const ENSURE_RETRY_MS = 60 * 1000;
+let _ensureKey = '';
+let _ensurePromise = null;
+
+function ensureTables(cfg) {
+  // key ตามฐานข้อมูล: เปลี่ยนการเชื่อมต่อจากหน้าตั้งค่าแล้วต้องตรวจฐานใหม่โดยไม่ต้องรีสตาร์ต
+  const key = `${cfg.db_type}:${cfg.host}:${cfg.port}:${cfg.database}`;
+  if (_ensurePromise && _ensureKey === key) return _ensurePromise;
+
+  const clear = () => { if (_ensurePromise === current) _ensurePromise = null; };
+  const current = runEnsureTables(cfg).then(
+    (failed) => {
+      // มีคอลัมน์ที่เพิ่มไม่สำเร็จ (เช่น รอ lock จนหมดเวลา) — ลองใหม่ภายหลัง แต่ไม่ลองทุก request
+      if (failed > 0) setTimeout(clear, ENSURE_RETRY_MS).unref();
+    },
+    (err) => { clear(); throw err; }
+  );
+  _ensureKey = key;
+  _ensurePromise = current;
+  return current;
+}
+
+async function runEnsureTables(cfg) {
   const isPg = cfg.db_type === 'postgresql';
   const autoInc = isPg ? 'SERIAL PRIMARY KEY' : 'INT AUTO_INCREMENT PRIMARY KEY';
 
@@ -79,8 +103,9 @@ async function ensureTables(cfg) {
     bookings: ['booking_ref VARCHAR(20)', 'an VARCHAR(20)', 'ward VARCHAR(100)', 'doctor_name VARCHAR(200)', 'deposit_amount DECIMAL(10,2) DEFAULT 0', 'contact_name VARCHAR(200)', 'contact_phone VARCHAR(50)', 'priority_type VARCHAR(200)', 'no_pay_reason TEXT'],
     room_types: ['food_price_per_day DECIMAL(10,2) DEFAULT 0'],
     rooms: ['ward VARCHAR(100)'],
-    waiting_list: ['an VARCHAR(20)', 'ward VARCHAR(100)', 'doctor_name VARCHAR(200)', 'contact_name VARCHAR(200)', 'contact_phone VARCHAR(50)', 'priority_type VARCHAR(200)', 'roomtype_code VARCHAR(50)', 'roomtype_name VARCHAR(200)', 'check_in_date VARCHAR(50)', 'room_type_id_2 INTEGER', 'roomtype_code_2 VARCHAR(50)', 'roomtype_name_2 VARCHAR(200)', 'room_type_id_3 INTEGER', 'roomtype_code_3 VARCHAR(50)', 'roomtype_name_3 VARCHAR(200)', 'no_pay_reason TEXT']
+    waiting_list: ['an VARCHAR(20)', 'ward VARCHAR(100)', 'doctor_name VARCHAR(200)', 'contact_name VARCHAR(200)', 'contact_phone VARCHAR(50)', 'priority_type VARCHAR(200)', 'roomtype_code VARCHAR(50)', 'roomtype_name VARCHAR(200)', 'check_in_date VARCHAR(50)', 'room_type_id_2 INTEGER', 'roomtype_code_2 VARCHAR(50)', 'roomtype_name_2 VARCHAR(200)', 'room_type_id_3 INTEGER', 'roomtype_code_3 VARCHAR(50)', 'roomtype_name_3 VARCHAR(200)', 'no_pay_reason TEXT', 'assigned_at TIMESTAMP NULL', 'checkedin_at TIMESTAMP NULL']
   };
+  let failed = 0;
   for (const [tbl, cols] of Object.entries(alterCols)) {
     for (const col of cols) {
       const colName = col.split(' ')[0];
@@ -90,9 +115,16 @@ async function ensureTables(cfg) {
         } else {
           await query(`ALTER TABLE ${tbl} ADD COLUMN ${col}`, [], cfg);
         }
-      } catch {}
+      } catch (err) {
+        // MySQL ไม่มี ADD COLUMN IF NOT EXISTS จึงเจอ duplicate เป็นปกติเมื่อคอลัมน์มีอยู่แล้ว
+        const msg = String(err.message).toLowerCase();
+        if (msg.includes('duplicate') || msg.includes('already exists')) continue;
+        failed++;
+        console.error(`ensureTables: เพิ่มคอลัมน์ ${tbl}.${colName} ไม่สำเร็จ:`, err.message);
+      }
     }
   }
+  return failed;
 }
 
 // GET /api/rooms - all rooms with current occupant

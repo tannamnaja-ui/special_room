@@ -86,6 +86,7 @@ function switchTab(tab) {
   document.getElementById(`panel-${tab}`).classList.add('active');
   document.getElementById(`nav-${tab}`).classList.add('active');
   document.getElementById('topbarTitle').textContent = tabTitles[tab] || tab;
+  if (tab === 'booking')      applyCheckInDateLimit();  // คำนวณวันสุดท้ายที่จองได้ใหม่ทุกครั้ง เผื่อเปิดหน้าค้างข้ามวัน
   if (tab === 'specrooms')    loadSpecRooms();
   if (tab === 'allrooms')     loadAllQueue();
   if (tab === 'settings')     loadSettingsData();
@@ -735,11 +736,32 @@ async function searchPatient() {
 }
 
 /* ===== SET DEFAULT DATE/TIME ===== */
+// จองล่วงหน้าได้ไม่เกิน 7 วันนับจากวันปัจจุบัน
+const BOOKING_MAX_DAYS_AHEAD = 7;
+
+function bookingMaxCheckInDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + BOOKING_MAX_DAYS_AHEAD);
+  d.setHours(23, 59, 0, 0);
+  return d;
+}
+
+// ใส่ค่า max ให้ช่องวันที่เข้าพัก เพื่อให้ปฏิทินของเบราว์เซอร์เลือกเกิน 7 วันไม่ได้
+function applyCheckInDateLimit() {
+  const el = document.getElementById('bnCheckIn');
+  if (!el) return;
+  const pad = n => String(n).padStart(2, '0');
+  const d = bookingMaxCheckInDate();
+  el.max = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  el.title = `เลือกได้ไม่เกิน ${BOOKING_MAX_DAYS_AHEAD} วันหลังวันปัจจุบัน`;
+}
+
 function setDefaultDateTime() {
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
   const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   document.getElementById('bnCheckIn').value = fmt(now);
+  applyCheckInDateLimit();
 }
 
 /* ===== SUBMIT BOOKING ===== */
@@ -765,6 +787,12 @@ async function submitBooking() {
   if (!contactName)  return toast('กรุณากรอกชื่อผู้ติดต่อ', 'warning');
   if (!contactPhone) return toast('กรุณากรอกเบอร์โทรผู้ติดต่อ', 'warning');
   if (!checkIn)      return toast('กรุณาระบุวันที่เข้าพัก', 'warning');
+
+  // กันกรณีพิมพ์วันที่เองหรือค่าที่ดึงมาจากคิวรอเกินกำหนด (ปฏิทินกันได้แค่ตอนเลือกด้วยเมาส์)
+  const maxCheckIn = bookingMaxCheckInDate();
+  if (new Date(checkIn) > maxCheckIn)
+    return toast(`วันที่เข้าพักต้องไม่เกิน ${BOOKING_MAX_DAYS_AHEAD} วันหลังวันปัจจุบัน `
+      + `(ไม่เกิน ${maxCheckIn.toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' })})`, 'warning');
 
   const selectedOpt = document.getElementById('bnRoomId').options[document.getElementById('bnRoomId').selectedIndex];
   const roomId     = selectedOpt?.dataset.roomId || null;

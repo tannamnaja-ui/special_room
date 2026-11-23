@@ -272,9 +272,16 @@ router.get('/total-revenue', authCheck, async (req, res) => {
   }
 });
 
-// 6) สรุประยะเวลารอคอยการจองห้องพิเศษ — นับราย AN ตั้งแต่ "จอง" (waiting_list.request_date) จนได้ "เข้าห้อง" จริง
-// (ครั้งแรกที่ AN นั้นถูกย้ายเข้าเตียงพิเศษจริง จากประวัติการย้ายเตียง iptbedmove ไม่ใช่แค่เวลาที่พยาบาลบันทึกจองในแอป)
-// หมายเหตุ: waiting_list.an ต้องมีข้อมูล (กรอก/ค้นหา AN ไว้ตอนเพิ่มคิว) ถึงจะจับคู่กับ iptbedmove ได้
+// 6) สรุประยะเวลารอคอยการจองห้องพิเศษ — นับตั้งแต่ "เข้าคิว" (waiting_list.request_date) จนถึง "ได้ห้อง"
+// เวลาได้ห้องเลือกจากแหล่งที่แม่นที่สุดที่มี ตามลำดับ (got_room_source):
+//   his       = ครั้งแรกที่ถูกย้ายเข้าเตียงพิเศษจริง (iptbedmove) — จับคู่ด้วย AN ในคิว ถ้าคิวไม่มี AN (จองก่อน admit)
+//               ใช้ HN หา admission ของคนไข้คนนั้นที่ย้ายเข้าเตียงพิเศษหลังเวลาเข้าคิว
+//   checkedin = เวลากด "ยืนยันเข้าพัก" ในแอป
+//   assigned  = เวลาจัดห้อง/บันทึกจองในแอป (waiting_list.assigned_at)
+//   booking   = เวลาสร้างรายการจองในตาราง bookings ของคนไข้คนนั้นหลังเข้าคิว (ข้อมูลเก่าที่ยังไม่มี assigned_at)
+// เดิมนับเฉพาะคิวที่มี AN และมีประวัติย้ายเข้าเตียงพิเศษใน iptbedmove ทำให้คนไข้ที่จองแล้วได้ห้อง
+// (จองก่อน admit จึงไม่มี AN / admit เข้าเตียงพิเศษตรง ๆ ไม่มีประวัติย้าย / ยังไม่ได้ย้ายเข้าเตียงใน HIS) หายจากรายงาน
+const GOT_ROOM_STATUSES = `('reserved','assigned','checkedin')`;
 router.get('/waiting-duration', authCheck, async (req, res) => {
   const cfg = loadSettings();
   try {
@@ -284,23 +291,53 @@ router.get('/waiting-duration', authCheck, async (req, res) => {
     let where = dateRangeClause('wl.request_date', from, to, params);
     where += wardClause('w.ward', ward, params);
     const rows = await query(`
-      SELECT wl.an, wl.hn, wl.patient_name, wl.ward, wl.roomtype_name,
-             wl.request_date, m.first_move_at as got_room_at, m.bedno as room_number, w.name as room_ward_name,
-             EXTRACT(EPOCH FROM (m.first_move_at - wl.request_date)) as wait_seconds
+      SELECT wl.id, COALESCE(NULLIF(TRIM(wl.an), ''), hm.an) as an, wl.hn, wl.patient_name, wl.ward, wl.roomtype_name,
+             wl.status, wl.request_date,
+             COALESCE(hm.move_at, wl.checkedin_at, wl.assigned_at, bk.created_at) as got_room_at,
+             CASE WHEN hm.move_at IS NOT NULL THEN 'his'
+                  WHEN wl.checkedin_at IS NOT NULL THEN 'checkedin'
+                  WHEN wl.assigned_at IS NOT NULL THEN 'assigned'
+                  WHEN bk.created_at IS NOT NULL THEN 'booking'
+             END as got_room_source,
+             COALESCE(hm.bedno, bk.room_number) as room_number, w.name as room_ward_name,
+             EXTRACT(EPOCH FROM (COALESCE(hm.move_at, wl.checkedin_at, wl.assigned_at, bk.created_at) - wl.request_date)) as wait_seconds
       FROM waiting_list wl
-      JOIN (
-        SELECT i.an, MIN(i.movedate + i.movetime) as first_move_at,
-               (ARRAY_AGG(i.nbedno ORDER BY i.movedate, i.movetime))[1] as bedno,
-               (ARRAY_AGG(i.nroomno ORDER BY i.movedate, i.movetime))[1] as roomno
+      -- แยก 2 LATERAL (ตาม AN / ตาม HN) แทนการใช้ OR ใน WHERE เดียว เพื่อให้ใช้ index ของ iptbedmove.an / ipt.hn ได้
+      LEFT JOIN LATERAL (
+        SELECT i.an, (i.movedate + i.movetime) as move_at, i.nbedno as bedno, i.nroomno as roomno
         FROM iptbedmove i
         JOIN bedno bn ON bn.bedno = i.nbedno
         JOIN bedtype bt ON bt.bedtype = bn.bedtype
-        WHERE bt.hos_guid = 'Y'
-        GROUP BY i.an
-      ) m ON m.an = wl.an
-      LEFT JOIN roomno rn ON rn.roomno = m.roomno
+        WHERE i.an = TRIM(wl.an) AND bt.hos_guid = 'Y' AND i.movedate IS NOT NULL
+        ORDER BY i.movedate, i.movetime
+        LIMIT 1
+      ) hm_an ON NULLIF(TRIM(wl.an), '') IS NOT NULL
+      LEFT JOIN LATERAL (
+        SELECT i.an, (i.movedate + i.movetime) as move_at, i.nbedno as bedno, i.nroomno as roomno
+        FROM ipt ip
+        JOIN iptbedmove i ON i.an = ip.an
+        JOIN bedno bn ON bn.bedno = i.nbedno
+        JOIN bedtype bt ON bt.bedtype = bn.bedtype
+        WHERE ip.hn = wl.hn AND bt.hos_guid = 'Y' AND i.movedate IS NOT NULL
+          AND (i.movedate + i.movetime) >= wl.request_date
+        ORDER BY i.movedate, i.movetime
+        LIMIT 1
+      ) hm_hn ON NULLIF(TRIM(wl.an), '') IS NULL
+      CROSS JOIN LATERAL (
+        SELECT COALESCE(hm_an.an, hm_hn.an) as an, COALESCE(hm_an.move_at, hm_hn.move_at) as move_at,
+               COALESCE(hm_an.bedno, hm_hn.bedno) as bedno, COALESCE(hm_an.roomno, hm_hn.roomno) as roomno
+      ) hm
+      LEFT JOIN LATERAL (
+        SELECT b.created_at, b.room_number
+        FROM bookings b
+        WHERE b.hn = wl.hn AND b.created_at >= wl.request_date AND COALESCE(b.status, '') <> 'cancelled'
+        ORDER BY b.created_at
+        LIMIT 1
+      ) bk ON wl.status IN ${GOT_ROOM_STATUSES}
+      LEFT JOIN bedno rb ON rb.bedno = COALESCE(hm.bedno, bk.room_number)
+      LEFT JOIN roomno rn ON rn.roomno = COALESCE(hm.roomno, rb.roomno)
       LEFT JOIN ward w ON w.ward = rn.ward
-      WHERE wl.an IS NOT NULL AND wl.an <> '' ${where}
+      WHERE (hm.move_at IS NOT NULL OR wl.status IN ${GOT_ROOM_STATUSES}) ${where}
       ORDER BY wl.request_date DESC
     `, params, cfg);
     res.json({ success: true, rows });
@@ -392,6 +429,9 @@ router.get('/shift-revenue', authCheck, async (req, res) => {
 // "จำนวนคืนที่นอน" = SUM(qty) ของรายการค่าห้อง (1 รายการอาจครอบคลุมหลายคืนถ้าออกบิลเป็นรอบ ไม่ใช่ราย 1 คืนเสมอไป)
 // "ราคาเต็ม" = ผลรวมทุกรายการที่ถูกออกบิลแล้ว (paidst 00/01/02/03/04 ทั้งหมด รวมที่ยังค้างชำระด้วย)
 // claimable/payable/discount คือยอดย่อยของราคาเต็ม แยกตามสถานะจ่ายเงิน (paidst) จึงรวมกันแล้วอาจไม่เท่าราคาเต็มถ้ายังมีค้างชำระ (paidst=00) เหลืออยู่
+// "ราคาส่วนลด" นับ 2 แหล่งรวมกัน แล้วหักออกจาก "ราคาที่ต้องชำระ":
+//   1) opitemrece.discount — จำนวนเงินส่วนลดที่บันทึกไว้กับรายการเรียกเก็บ
+//   2) pttype_items_price_inc.discount_percent — ส่วนลดเป็น % ตามสิทธิ คิดจาก inc_cover_price (ต่อคืน) x จำนวนคืน
 router.get('/bed-full-summary', authCheck, async (req, res) => {
   const cfg = loadSettings();
   try {
@@ -413,20 +453,42 @@ router.get('/bed-full-summary', authCheck, async (req, res) => {
         ORDER BY i.an, (i.movedate + i.movetime) DESC
       ),
       paid_charges AS (
-        SELECT ab.bedno, rn.name as room_name, sb.rate_per_night, w.ward as ward_code, o.sum_price, o.qty, o.vstdate, o.paidst
+        SELECT ab.bedno, rn.name as room_name, sb.rate_per_night, w.ward as ward_code,
+               o.sum_price, o.qty, o.vstdate, o.paidst,
+               -- ส่วนลดที่ 1: จำนวนเงินส่วนลดที่บันทึกมาพร้อมรายการเรียกเก็บ
+               COALESCE(o.discount, 0) AS cash_discount,
+               -- ส่วนลดที่ 2: ส่วนลดเป็น % ตามสิทธิของผู้ป่วย (pttype_items_price_inc.discount_percent
+               -- คิดจาก inc_cover_price) คูณจำนวนคืนของรายการนั้น เพราะ cover price เป็นราคาต่อคืน
+               COALESCE(pct.discount_per_unit, 0) * COALESCE(o.qty, 1) AS pttype_discount
         FROM opitemrece o
         JOIN an_bed ab ON ab.an = o.an
         JOIN special_beds sb ON sb.bedno = ab.bedno AND sb.room_charge_icode = o.icode
         LEFT JOIN roomno rn ON rn.roomno = sb.roomno
         LEFT JOIN ward w ON w.ward = rn.ward
+        LEFT JOIN LATERAL (
+          SELECT MAX(inc.inc_cover_price * inc.discount_percent / 100.0) AS discount_per_unit
+          FROM pttype_items_price pip
+          JOIN pttype_items_price_inc inc ON inc.pttype_items_price_id = pip.pttype_items_price_id
+          WHERE pip.items_table_code = o.icode
+            AND pip.pttype = o.pttype
+            AND inc.discount_percent > 0
+            AND inc.inc_cover_price > 0
+        ) pct ON TRUE
         WHERE o.paidst IN ('00','01','02','03','04')
       )
       SELECT bedno as room_number, MAX(room_name) as room_name, MAX(rate_per_night) as rate_per_night,
              SUM(qty) as nights,
              SUM(sum_price) as full_price,
              SUM(sum_price) FILTER (WHERE paidst = '02') as claimable_revenue,
-             SUM(sum_price) FILTER (WHERE paidst IN ('01','03')) as payable_revenue,
-             SUM(sum_price) FILTER (WHERE paidst = '04') as discount_revenue
+             -- ราคาที่ต้องชำระ = ยอดที่ผู้ป่วยจ่ายเอง หักส่วนลดทั้งสองแบบออกแล้ว (ไม่ให้ติดลบ)
+             GREATEST(
+               COALESCE(SUM(sum_price) FILTER (WHERE paidst IN ('01','03')), 0)
+               - COALESCE(SUM(cash_discount + pttype_discount), 0), 0
+             ) as payable_revenue,
+             -- ส่วนลดรวมทั้งสองแบบ (เงินส่วนลดในบิล + ส่วนลด % ตามสิทธิ)
+             COALESCE(SUM(cash_discount + pttype_discount), 0) as discount_revenue,
+             COALESCE(SUM(cash_discount), 0) as cash_discount,
+             COALESCE(SUM(pttype_discount), 0) as pttype_discount
       FROM paid_charges
       WHERE 1=1 ${where}
       GROUP BY bedno

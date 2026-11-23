@@ -92,9 +92,9 @@ const REPORTS_CONFIG = {
   },
   'waiting-duration': {
     icon: '⏳', title: 'สรุประยะเวลารอคอยการจองห้องพิเศษ',
-    desc: 'นับราย AN ตั้งแต่เข้าคิวจอง จนได้เข้าห้องพิเศษจริง',
+    desc: 'นับตั้งแต่เข้าคิวจอง จนได้ห้องพิเศษ',
     endpoint: '/api/reports/waiting-duration', render: renderWaitingDurationReport,
-    note: 'นับได้เฉพาะรายการที่มี AN กรอกไว้ในคิวรอ และ AN นั้นเคยถูกย้ายเข้าห้องพิเศษจริงแล้ว (จากประวัติการย้ายเตียง)'
+    note: 'เวลาได้ห้องใช้เวลาย้ายเข้าเตียงพิเศษจริงใน HIS ก่อน (จับคู่ด้วย AN หรือ HN ถ้าคิวไม่มี AN) ถ้า HIS ยังไม่มีประวัติ จะใช้เวลายืนยันเข้าพัก / เวลาจองห้องที่บันทึกในระบบแทน — ดูคอลัมน์ "ที่มาของเวลา"'
   },
   'rights-summary': {
     icon: '🪪', title: 'สรุปจำนวนจ่ายห้องของแต่ละกลุ่มสิทธิ',
@@ -455,6 +455,14 @@ function renderBedFullSummaryReport(data) {
     </div>`;
 }
 
+// ที่มาของ "เวลาได้ห้อง" ในรายงานระยะเวลารอคอย (ต้องตรงกับ got_room_source ใน routes/reports.js)
+const GOT_ROOM_SOURCE_LABELS = {
+  his:       'ย้ายเข้าเตียงใน HIS',
+  checkedin: 'ยืนยันเข้าพักในระบบ',
+  assigned:  'จองห้องในระบบ',
+  booking:   'รายการจองในระบบ'
+};
+
 function renderWaitingDurationReport(data) {
   const rows = data.rows || [];
   if (rows.length === 0) return `<div class="empty-state"><div class="empty-icon">📋</div><p>ไม่พบข้อมูลในช่วงที่เลือก</p></div>`;
@@ -467,14 +475,15 @@ function renderWaitingDurationReport(data) {
       <td style="padding:8px 10px">${escHtml(r.room_number||'-')} ${r.room_ward_name ? '/ ' + escHtml(r.room_ward_name) : ''}</td>
       <td style="padding:8px 10px;white-space:nowrap">${fmtDT(r.request_date)}</td>
       <td style="padding:8px 10px;white-space:nowrap">${fmtDT(r.got_room_at)}</td>
-      <td style="padding:8px 10px;white-space:nowrap;font-weight:600">${formatDuration(r.request_date, r.got_room_at)}</td>
+      <td style="padding:8px 10px;white-space:nowrap;font-weight:600">${r.got_room_at ? formatDuration(r.request_date, r.got_room_at) : '-'}</td>
+      <td style="padding:8px 10px;white-space:nowrap;font-size:12px;color:#546E7A">${escHtml(GOT_ROOM_SOURCE_LABELS[r.got_room_source] || 'ยังไม่มีเวลาได้ห้อง')}</td>
     </tr>`).join('');
   return `
-    <div style="margin-bottom:14px;font-size:13px;color:#546E7A">พบ <b>${rows.length}</b> AN</div>
+    <div style="margin-bottom:14px;font-size:13px;color:#546E7A">พบ <b>${rows.length}</b> ราย</div>
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#F5F7FA;color:#546E7A;font-size:12px;font-weight:700">
-        ${reportTh('AN')}${reportTh('HN')}${reportTh('ชื่อ-สกุล')}${reportTh('ห้องที่ได้ / Ward')}${reportTh('วันที่เข้าคิว')}${reportTh('วันที่ได้เข้าห้อง')}${reportTh('ระยะเวลารอ')}
+        ${reportTh('AN')}${reportTh('HN')}${reportTh('ชื่อ-สกุล')}${reportTh('ห้องที่ได้ / Ward')}${reportTh('วันที่เข้าคิว')}${reportTh('วันที่ได้เข้าห้อง')}${reportTh('ระยะเวลารอ')}${reportTh('ที่มาของเวลา')}
       </tr></thead>
       <tbody>${bodyRows}</tbody>
     </table>
