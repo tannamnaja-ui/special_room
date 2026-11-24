@@ -1012,7 +1012,10 @@ async function loadWaitlist() {
     const data = await res.json();
     if (!data.success) return;
     const allList = data.list || [];
-    let list = filterVal === 'all' ? allList
+    // "คนที่ได้ห้องแล้ว" รวมทุกสถานะหลังได้ห้อง: จองแล้ว / ได้ห้องแล้ว / ยืนยันเข้าพักแล้ว
+    const GOT_ROOM_STATUSES = ['reserved', 'assigned', 'checkedin'];
+    let list = filterVal === 'all'      ? allList
+             : filterVal === 'reserved' ? allList.filter(w => GOT_ROOM_STATUSES.includes(w.status))
              : allList.filter(w => w.status === filterVal);
 
     // กรองวันที่เข้าพัก
