@@ -92,9 +92,20 @@ const REPORTS_CONFIG = {
   },
   'waiting-duration': {
     icon: '⏳', title: 'สรุประยะเวลารอคอยการจองห้องพิเศษ',
-    desc: 'นับตั้งแต่เข้าคิวจอง จนได้ห้องพิเศษ',
+    desc: 'นับตั้งแต่เข้าคิวจอง จนได้ห้องพิเศษ รวมคนไข้ที่ Admit เตียงสามัญรออยู่',
     endpoint: '/api/reports/waiting-duration', render: renderWaitingDurationReport,
-    note: 'เวลาได้ห้องใช้เวลาย้ายเข้าเตียงพิเศษจริงใน HIS ก่อน (จับคู่ด้วย AN หรือ HN ถ้าคิวไม่มี AN) ถ้า HIS ยังไม่มีประวัติ จะใช้เวลายืนยันเข้าพัก / เวลาจองห้องที่บันทึกในระบบแทน — ดูคอลัมน์ "ที่มาของเวลา"'
+    note: 'เวลาได้ห้องใช้เวลาย้ายเข้าเตียงพิเศษจริงใน HIS ก่อน (จับคู่ด้วย AN หรือ HN ถ้าคิวไม่มี AN) ถ้า HIS ยังไม่มีประวัติ จะใช้เวลายืนยันเข้าพัก / เวลาจองห้องที่บันทึกในระบบแทน — ดูคอลัมน์ "ที่มาของเวลา" — คนไข้ที่ Admit เตียงสามัญรออยู่ (ยังไม่ได้ย้ายเข้าห้องพิเศษ) จะนับเวลารอต่อเนื่องถึงปัจจุบัน'
+  },
+  'daily-booking-volume': {
+    icon: '📈', title: 'สรุปยอดการจองรายวัน/เดือน',
+    desc: 'จำนวนคนไข้ที่เข้าคิวจอง เทียบกับจำนวนที่ได้ห้องพิเศษแล้ว vs ยังไม่ได้ห้อง พร้อมอัตราได้ห้อง',
+    endpoint: '/api/reports/daily-booking-volume', render: renderDailyBookingVolumeReport,
+    note: 'กรุ๊ปตามวันที่เข้าคิว (request_date) — ถ้าเลือกช่วงวันที่จะแจงเป็นรายวัน ถ้าดูทั้งหมดจะสรุปเป็นรายเดือน'
+  },
+  'roomtype-popularity': {
+    icon: '🏷️', title: 'สรุปประเภทห้อง(ราคา)ที่มีการจองมากที่สุด',
+    desc: 'จัดอันดับประเภทห้องตามจำนวนครั้งที่ถูกจอง พร้อมราคาต่อวัน',
+    endpoint: '/api/reports/roomtype-popularity', render: renderRoomtypePopularityReport
   },
   'rights-summary': {
     icon: '🪪', title: 'สรุปจำนวนจ่ายห้องของแต่ละกลุ่มสิทธิ',
@@ -457,10 +468,11 @@ function renderBedFullSummaryReport(data) {
 
 // ที่มาของ "เวลาได้ห้อง" ในรายงานระยะเวลารอคอย (ต้องตรงกับ got_room_source ใน routes/reports.js)
 const GOT_ROOM_SOURCE_LABELS = {
-  his:       'ย้ายเข้าเตียงใน HIS',
-  checkedin: 'ยืนยันเข้าพักในระบบ',
-  assigned:  'จองห้องในระบบ',
-  booking:   'รายการจองในระบบ'
+  his:             'ย้ายเข้าเตียงใน HIS',
+  checkedin:       'ยืนยันเข้าพักในระบบ',
+  assigned:        'จองห้องในระบบ',
+  booking:         'รายการจองในระบบ',
+  admitted_common: 'Admit เตียงสามัญ รอย้ายเข้าห้องพิเศษ'
 };
 
 function renderWaitingDurationReport(data) {
@@ -474,8 +486,9 @@ function renderWaitingDurationReport(data) {
       <td style="padding:8px 10px">${escHtml(r.patient_name||'-')}</td>
       <td style="padding:8px 10px">${escHtml(r.room_number||'-')} ${r.room_ward_name ? '/ ' + escHtml(r.room_ward_name) : ''}</td>
       <td style="padding:8px 10px;white-space:nowrap">${fmtDT(r.request_date)}</td>
+      <td style="padding:8px 10px;white-space:nowrap">${fmtDT(r.check_in_date)}</td>
       <td style="padding:8px 10px;white-space:nowrap">${fmtDT(r.got_room_at)}</td>
-      <td style="padding:8px 10px;white-space:nowrap;font-weight:600">${r.got_room_at ? formatDuration(r.request_date, r.got_room_at) : '-'}</td>
+      <td style="padding:8px 10px;white-space:nowrap;font-weight:600">${formatDuration(r.request_date, r.got_room_at)}</td>
       <td style="padding:8px 10px;white-space:nowrap;font-size:12px;color:#546E7A">${escHtml(GOT_ROOM_SOURCE_LABELS[r.got_room_source] || 'ยังไม่มีเวลาได้ห้อง')}</td>
     </tr>`).join('');
   return `
@@ -483,9 +496,74 @@ function renderWaitingDurationReport(data) {
     <div style="overflow-x:auto">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#F5F7FA;color:#546E7A;font-size:12px;font-weight:700">
-        ${reportTh('AN')}${reportTh('HN')}${reportTh('ชื่อ-สกุล')}${reportTh('ห้องที่ได้ / Ward')}${reportTh('วันที่เข้าคิว')}${reportTh('วันที่ได้เข้าห้อง')}${reportTh('ระยะเวลารอ')}${reportTh('ที่มาของเวลา')}
+        ${reportTh('AN')}${reportTh('HN')}${reportTh('ชื่อ-สกุล')}${reportTh('ห้องที่ได้ / Ward')}${reportTh('วันที่เข้าคิว')}${reportTh('วันที่เข้าพัก ที่ลงไว้ในหน้าจอง')}${reportTh('วันที่ได้เข้าห้อง')}${reportTh('ระยะเวลารอ')}${reportTh('ที่มาของเวลา')}
       </tr></thead>
       <tbody>${bodyRows}</tbody>
+    </table>
+    </div>`;
+}
+
+// สรุปยอดการจองรายวัน/เดือน — จำนวนที่เข้าคิว เทียบกับได้ห้องแล้ว/ยังรออยู่ พร้อมอัตราได้ห้อง
+function renderDailyBookingVolumeReport(data) {
+  const rows = data.rows || [];
+  if (rows.length === 0) return `<div class="empty-state"><div class="empty-icon">📋</div><p>ไม่พบข้อมูลในช่วงที่เลือก</p></div>`;
+  const label = data.groupedByDay ? 'วันที่' : 'เดือน';
+  let totalReq = 0, totalGot = 0, totalWaiting = 0;
+  const bodyRows = rows.map((r, i) => {
+    const req = +r.requested_count || 0, got = +r.got_room_count || 0, waiting = +r.waiting_count || 0;
+    totalReq += req; totalGot += got; totalWaiting += waiting;
+    const rate = req > 0 ? (got / req * 100) : 0;
+    return `<tr style="background:${i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #F0F0F0">
+      <td style="padding:8px 10px;font-weight:600">${escHtml(r.period||'-')}</td>
+      <td style="padding:8px 10px;text-align:right">${req.toLocaleString('th-TH')}</td>
+      <td style="padding:8px 10px;text-align:right;color:#2E7D32;font-weight:700">${got.toLocaleString('th-TH')}</td>
+      <td style="padding:8px 10px;text-align:right;color:#F57F17">${waiting.toLocaleString('th-TH')}</td>
+      <td style="padding:8px 10px;text-align:right;font-weight:700">${rate.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+  const totalRate = totalReq > 0 ? (totalGot / totalReq * 100) : 0;
+  return `
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#F5F7FA;color:#546E7A;font-size:12px;font-weight:700">
+        ${reportTh(label)}<th style="padding:10px 12px;text-align:right;border-bottom:1px solid #E0E0E0">จำนวนที่จอง</th><th style="padding:10px 12px;text-align:right;border-bottom:1px solid #E0E0E0">ได้ห้องแล้ว</th><th style="padding:10px 12px;text-align:right;border-bottom:1px solid #E0E0E0">ยังไม่ได้ห้อง</th><th style="padding:10px 12px;text-align:right;border-bottom:1px solid #E0E0E0">อัตราได้ห้อง</th>
+      </tr></thead>
+      <tbody>${bodyRows}</tbody>
+      <tfoot><tr style="background:#F5F7FA;font-weight:700">
+        <td style="padding:8px 10px">รวมทั้งหมด</td>
+        <td style="padding:8px 10px;text-align:right">${totalReq.toLocaleString('th-TH')}</td>
+        <td style="padding:8px 10px;text-align:right;color:#2E7D32">${totalGot.toLocaleString('th-TH')}</td>
+        <td style="padding:8px 10px;text-align:right;color:#F57F17">${totalWaiting.toLocaleString('th-TH')}</td>
+        <td style="padding:8px 10px;text-align:right">${totalRate.toFixed(1)}%</td>
+      </tr></tfoot>
+    </table>
+    </div>`;
+}
+
+// สรุปประเภทห้อง(ราคา)ที่มีการจองมากที่สุด เรียงจากมากไปน้อย
+function renderRoomtypePopularityReport(data) {
+  const rows = data.rows || [];
+  if (rows.length === 0) return `<div class="empty-state"><div class="empty-icon">📋</div><p>ไม่พบข้อมูลในช่วงที่เลือก</p></div>`;
+  let totalCount = 0;
+  const bodyRows = rows.map((r, i) => {
+    totalCount += (+r.bookings_count || 0);
+    return `<tr style="background:${i%2===0?'#fff':'#FAFAFA'};border-bottom:1px solid #F0F0F0">
+      <td style="padding:8px 10px;font-weight:600">${escHtml(r.type_name||'-')}</td>
+      <td style="padding:8px 10px;text-align:right">${fmtBaht(r.price_per_day)}</td>
+      <td style="padding:8px 10px;text-align:right;font-weight:700;color:var(--primary)">${(+r.bookings_count||0).toLocaleString('th-TH')}</td>
+    </tr>`;
+  }).join('');
+  return `
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#F5F7FA;color:#546E7A;font-size:12px;font-weight:700">
+        ${reportTh('ประเภทห้อง')}<th style="padding:10px 12px;text-align:right;border-bottom:1px solid #E0E0E0">ราคาต่อวัน</th><th style="padding:10px 12px;text-align:right;border-bottom:1px solid #E0E0E0">จำนวนครั้งที่จอง</th>
+      </tr></thead>
+      <tbody>${bodyRows}</tbody>
+      <tfoot><tr style="background:#F5F7FA;font-weight:700">
+        <td style="padding:8px 10px" colspan="2">รวมทั้งหมด</td>
+        <td style="padding:8px 10px;text-align:right">${totalCount.toLocaleString('th-TH')}</td>
+      </tr></tfoot>
     </table>
     </div>`;
 }

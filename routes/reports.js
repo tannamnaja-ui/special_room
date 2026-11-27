@@ -274,14 +274,62 @@ router.get('/total-revenue', authCheck, async (req, res) => {
 
 // 6) สรุประยะเวลารอคอยการจองห้องพิเศษ — นับตั้งแต่ "เข้าคิว" (waiting_list.request_date) จนถึง "ได้ห้อง"
 // เวลาได้ห้องเลือกจากแหล่งที่แม่นที่สุดที่มี ตามลำดับ (got_room_source):
-//   his       = ครั้งแรกที่ถูกย้ายเข้าเตียงพิเศษจริง (iptbedmove) — จับคู่ด้วย AN ในคิว ถ้าคิวไม่มี AN (จองก่อน admit)
-//               ใช้ HN หา admission ของคนไข้คนนั้นที่ย้ายเข้าเตียงพิเศษหลังเวลาเข้าคิว
-//   checkedin = เวลากด "ยืนยันเข้าพัก" ในแอป
-//   assigned  = เวลาจัดห้อง/บันทึกจองในแอป (waiting_list.assigned_at)
-//   booking   = เวลาสร้างรายการจองในตาราง bookings ของคนไข้คนนั้นหลังเข้าคิว (ข้อมูลเก่าที่ยังไม่มี assigned_at)
+//   his             = ครั้งแรกที่ถูกย้ายเข้าเตียงพิเศษจริง (iptbedmove) — จับคู่ด้วย AN ในคิว ถ้าคิวไม่มี AN (จองก่อน admit)
+//                     ใช้ HN หา admission ของคนไข้คนนั้นที่ย้ายเข้าเตียงพิเศษหลังเวลาเข้าคิว
+//   checkedin       = เวลากด "ยืนยันเข้าพัก" ในแอป
+//   assigned        = เวลาจัดห้อง/บันทึกจองในแอป (waiting_list.assigned_at)
+//   booking         = เวลาสร้างรายการจองในตาราง bookings ของคนไข้คนนั้นหลังเข้าคิว (ข้อมูลเก่าที่ยังไม่มี assigned_at)
+//   admitted_common = ยังไม่มีหลักฐานได้ห้องพิเศษเลย แต่คนไข้ถูก Admit เป็นผู้ป่วยในแล้ว (มี AN, ipt.dchdate ยังว่าง)
+//                     แปลว่ากำลังนอนเตียงสามัญรออยู่ — ต้องนับรวมเป็น "กำลังรอ" ไม่ใช่หายไปจากรายงาน
 // เดิมนับเฉพาะคิวที่มี AN และมีประวัติย้ายเข้าเตียงพิเศษใน iptbedmove ทำให้คนไข้ที่จองแล้วได้ห้อง
 // (จองก่อน admit จึงไม่มี AN / admit เข้าเตียงพิเศษตรง ๆ ไม่มีประวัติย้าย / ยังไม่ได้ย้ายเข้าเตียงใน HIS) หายจากรายงาน
 const GOT_ROOM_STATUSES = `('reserved','assigned','checkedin')`;
+
+// LATERAL ชุดนี้ใช้ร่วมกันทั้ง waiting-duration และ daily-booking-volume เพื่อหา "ได้ห้องหรือยัง" ของแต่ละแถวคิว (wl)
+// แยก 2 LATERAL (ตาม AN / ตาม HN) แทนการใช้ OR ใน WHERE เดียว เพื่อให้ใช้ index ของ iptbedmove.an / ipt.hn ได้
+const GOT_ROOM_JOINS_SQL = `
+  LEFT JOIN LATERAL (
+    SELECT i.an, (i.movedate + i.movetime) as move_at, i.nbedno as bedno, i.nroomno as roomno
+    FROM iptbedmove i
+    JOIN bedno bn ON bn.bedno = i.nbedno
+    JOIN bedtype bt ON bt.bedtype = bn.bedtype
+    WHERE i.an = TRIM(wl.an) AND bt.hos_guid = 'Y' AND i.movedate IS NOT NULL
+    ORDER BY i.movedate, i.movetime
+    LIMIT 1
+  ) hm_an ON NULLIF(TRIM(wl.an), '') IS NOT NULL
+  LEFT JOIN LATERAL (
+    SELECT i.an, (i.movedate + i.movetime) as move_at, i.nbedno as bedno, i.nroomno as roomno
+    FROM ipt ip
+    JOIN iptbedmove i ON i.an = ip.an
+    JOIN bedno bn ON bn.bedno = i.nbedno
+    JOIN bedtype bt ON bt.bedtype = bn.bedtype
+    WHERE ip.hn = wl.hn AND bt.hos_guid = 'Y' AND i.movedate IS NOT NULL
+      AND (i.movedate + i.movetime) >= wl.request_date
+    ORDER BY i.movedate, i.movetime
+    LIMIT 1
+  ) hm_hn ON NULLIF(TRIM(wl.an), '') IS NULL
+  CROSS JOIN LATERAL (
+    SELECT COALESCE(hm_an.an, hm_hn.an) as an, COALESCE(hm_an.move_at, hm_hn.move_at) as move_at,
+           COALESCE(hm_an.bedno, hm_hn.bedno) as bedno, COALESCE(hm_an.roomno, hm_hn.roomno) as roomno
+  ) hm
+  LEFT JOIN LATERAL (
+    SELECT b.created_at, b.room_number
+    FROM bookings b
+    WHERE b.hn = wl.hn AND b.created_at >= wl.request_date AND COALESCE(b.status, '') <> 'cancelled'
+    ORDER BY b.created_at
+    LIMIT 1
+  ) bk ON wl.status IN ${GOT_ROOM_STATUSES}
+  -- คนไข้ที่ Admit แล้ว (มี AN, ยังไม่จำหน่าย) แต่ยังไม่มีหลักฐานได้ห้องพิเศษเลยจาก hm/bk ข้างบน — กำลังรออยู่ที่เตียงสามัญ
+  LEFT JOIN LATERAL (
+    SELECT i.an
+    FROM ipt i
+    WHERE i.dchdate IS NULL
+      AND (i.an = NULLIF(TRIM(wl.an), '') OR (NULLIF(TRIM(wl.an), '') IS NULL AND i.hn = wl.hn AND i.regdate >= wl.request_date))
+    ORDER BY i.regdate DESC
+    LIMIT 1
+  ) admit ON TRUE
+`;
+
 router.get('/waiting-duration', authCheck, async (req, res) => {
   const cfg = loadSettings();
   try {
@@ -291,54 +339,76 @@ router.get('/waiting-duration', authCheck, async (req, res) => {
     let where = dateRangeClause('wl.request_date', from, to, params);
     where += wardClause('w.ward', ward, params);
     const rows = await query(`
-      SELECT wl.id, COALESCE(NULLIF(TRIM(wl.an), ''), hm.an) as an, wl.hn, wl.patient_name, wl.ward, wl.roomtype_name,
-             wl.status, wl.request_date,
+      SELECT wl.id, COALESCE(NULLIF(TRIM(wl.an), ''), hm.an, admit.an) as an, wl.hn, wl.patient_name, wl.ward, wl.roomtype_name,
+             wl.status, wl.request_date, wl.check_in_date,
              COALESCE(hm.move_at, wl.checkedin_at, wl.assigned_at, bk.created_at) as got_room_at,
              CASE WHEN hm.move_at IS NOT NULL THEN 'his'
                   WHEN wl.checkedin_at IS NOT NULL THEN 'checkedin'
                   WHEN wl.assigned_at IS NOT NULL THEN 'assigned'
                   WHEN bk.created_at IS NOT NULL THEN 'booking'
+                  WHEN admit.an IS NOT NULL THEN 'admitted_common'
              END as got_room_source,
              COALESCE(hm.bedno, bk.room_number) as room_number, w.name as room_ward_name,
-             EXTRACT(EPOCH FROM (COALESCE(hm.move_at, wl.checkedin_at, wl.assigned_at, bk.created_at) - wl.request_date)) as wait_seconds
+             EXTRACT(EPOCH FROM (COALESCE(hm.move_at, wl.checkedin_at, wl.assigned_at, bk.created_at,
+               CASE WHEN admit.an IS NOT NULL THEN NOW() END) - wl.request_date)) as wait_seconds
       FROM waiting_list wl
-      -- แยก 2 LATERAL (ตาม AN / ตาม HN) แทนการใช้ OR ใน WHERE เดียว เพื่อให้ใช้ index ของ iptbedmove.an / ipt.hn ได้
-      LEFT JOIN LATERAL (
-        SELECT i.an, (i.movedate + i.movetime) as move_at, i.nbedno as bedno, i.nroomno as roomno
-        FROM iptbedmove i
-        JOIN bedno bn ON bn.bedno = i.nbedno
-        JOIN bedtype bt ON bt.bedtype = bn.bedtype
-        WHERE i.an = TRIM(wl.an) AND bt.hos_guid = 'Y' AND i.movedate IS NOT NULL
-        ORDER BY i.movedate, i.movetime
-        LIMIT 1
-      ) hm_an ON NULLIF(TRIM(wl.an), '') IS NOT NULL
-      LEFT JOIN LATERAL (
-        SELECT i.an, (i.movedate + i.movetime) as move_at, i.nbedno as bedno, i.nroomno as roomno
-        FROM ipt ip
-        JOIN iptbedmove i ON i.an = ip.an
-        JOIN bedno bn ON bn.bedno = i.nbedno
-        JOIN bedtype bt ON bt.bedtype = bn.bedtype
-        WHERE ip.hn = wl.hn AND bt.hos_guid = 'Y' AND i.movedate IS NOT NULL
-          AND (i.movedate + i.movetime) >= wl.request_date
-        ORDER BY i.movedate, i.movetime
-        LIMIT 1
-      ) hm_hn ON NULLIF(TRIM(wl.an), '') IS NULL
-      CROSS JOIN LATERAL (
-        SELECT COALESCE(hm_an.an, hm_hn.an) as an, COALESCE(hm_an.move_at, hm_hn.move_at) as move_at,
-               COALESCE(hm_an.bedno, hm_hn.bedno) as bedno, COALESCE(hm_an.roomno, hm_hn.roomno) as roomno
-      ) hm
-      LEFT JOIN LATERAL (
-        SELECT b.created_at, b.room_number
-        FROM bookings b
-        WHERE b.hn = wl.hn AND b.created_at >= wl.request_date AND COALESCE(b.status, '') <> 'cancelled'
-        ORDER BY b.created_at
-        LIMIT 1
-      ) bk ON wl.status IN ${GOT_ROOM_STATUSES}
+      ${GOT_ROOM_JOINS_SQL}
       LEFT JOIN bedno rb ON rb.bedno = COALESCE(hm.bedno, bk.room_number)
       LEFT JOIN roomno rn ON rn.roomno = COALESCE(hm.roomno, rb.roomno)
       LEFT JOIN ward w ON w.ward = rn.ward
-      WHERE (hm.move_at IS NOT NULL OR wl.status IN ${GOT_ROOM_STATUSES}) ${where}
+      WHERE (hm.move_at IS NOT NULL OR wl.status IN ${GOT_ROOM_STATUSES} OR admit.an IS NOT NULL) ${where}
       ORDER BY wl.request_date DESC
+    `, params, cfg);
+    res.json({ success: true, rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 6b) สรุปยอดการจองรายวัน/เดือน — จำนวนคนไข้ที่เข้าคิวจอง เทียบกับจำนวนที่ได้ห้องพิเศษแล้ว vs ยังรออยู่ พร้อมอัตราได้ห้อง
+// ใช้เงื่อนไข "ได้ห้องแล้วหรือยัง" ชุดเดียวกับรายงานระยะเวลารอคอย (GOT_ROOM_JOINS_SQL) เพื่อให้ตัวเลขสองรายงานตรงกัน
+// group ตามวันที่ถ้าเลือกช่วงวันที่ (from/to) เหมือนรายงานรายได้รายเดือน ถ้าไม่เลือกช่วงจะสรุปเป็นรายเดือนแทน
+router.get('/daily-booking-volume', authCheck, async (req, res) => {
+  const cfg = loadSettings();
+  try {
+    await ensureTables(cfg);
+    const { from, to } = req.query;
+    const params = [];
+    const where = dateRangeClause('wl.request_date', from, to, params);
+    const groupedByDay = !!(from || to);
+    const groupExpr = groupedByDay ? `TO_CHAR(wl.request_date, 'YYYY-MM-DD')` : `TO_CHAR(wl.request_date, 'YYYY-MM')`;
+    const rows = await query(`
+      SELECT ${groupExpr} as period,
+             COUNT(*) as requested_count,
+             COUNT(*) FILTER (WHERE hm.move_at IS NOT NULL OR wl.status IN ${GOT_ROOM_STATUSES}) as got_room_count,
+             COUNT(*) FILTER (WHERE hm.move_at IS NULL AND wl.status NOT IN ${GOT_ROOM_STATUSES}) as waiting_count
+      FROM waiting_list wl
+      ${GOT_ROOM_JOINS_SQL}
+      WHERE 1=1 ${where}
+      GROUP BY ${groupExpr}
+      ORDER BY period
+    `, params, cfg);
+    res.json({ success: true, rows, groupedByDay });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 6c) สรุปประเภทห้อง(ราคา)ที่มีการจองมากที่สุด เรียงจากมากไปน้อย — นับจากรายการจองจริงในตาราง bookings (ไม่ว่าสถานะปัจจุบันจะเป็นอะไร)
+router.get('/roomtype-popularity', authCheck, async (req, res) => {
+  const cfg = loadSettings();
+  try {
+    await ensureTables(cfg);
+    const { from, to } = req.query;
+    const params = [];
+    const bkDateWhere = dateRangeClause('b.created_at', from, to, params);
+    const rows = await query(`
+      SELECT rt.id, rt.type_name, rt.price_per_day, rt.food_price_per_day,
+             COUNT(b.id) as bookings_count
+      FROM room_types rt
+      LEFT JOIN bookings b ON b.room_type_id = rt.id ${bkDateWhere}
+      GROUP BY rt.id, rt.type_name, rt.price_per_day, rt.food_price_per_day
+      ORDER BY bookings_count DESC, rt.price_per_day DESC
     `, params, cfg);
     res.json({ success: true, rows });
   } catch (err) {
